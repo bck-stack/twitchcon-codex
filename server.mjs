@@ -9,7 +9,11 @@ import {
   SIGNATURE_PATCH_PRESETS
 } from './src/compiler/codex-mutator.mjs';
 import { validateAndNormalizePatch } from './src/compiler/schema.mjs';
-import { TwitchIrcLiveConnector } from './src/twitch/bridge.mjs';
+import {
+  TwitchIrcLiveConnector,
+  TwitchHelixAndEventSubClient,
+  verifyTwitchEventSubSignature
+} from './src/twitch/bridge.mjs';
 import { renderChaosForgeHtml } from './src/ui/app.mjs';
 
 const PORT = Number(process.env.PORT || 4400);
@@ -47,8 +51,43 @@ function seedInitialStageDrones() {
 
 seedInitialStageDrones();
 
+// Live Twitch Helix REST API & EventSub (Webhook + WebSocket) Client
+export const eventSubClient = new TwitchHelixAndEventSubClient({
+  onEventSubDirective: async (directive) => {
+    arena.applyEventSubDirective(directive);
+    if (directive.eventType === 'channel.hype_train.begin') {
+      const compiled = await compileNaturalLanguagePatch({
+        prompt: 'Hype Train Overdrive: Binary pulsar gravity wells with 3.4x tether whips and prism ricochet lasers',
+        author: 'twitch_eventsub_hypetrain',
+        currentPatch: arena.activePatch
+      });
+      if (compiled.ok) {
+        arena.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation);
+      }
+    }
+  }
+});
+
 // Live Twitch IRCv3 WebSocket Connector
 export const twitchConnector = new TwitchIrcLiveConnector({
+  onUserNotice: (notice) => {
+    if (notice.msgId === 'raid') {
+      eventSubClient.triggerEvent('channel.raid', {
+        from_broadcaster_user_name: notice.username,
+        viewers: notice.raidViewerCount
+      }, 'irc_usernotice');
+    } else if (notice.msgId === 'cheer') {
+      eventSubClient.triggerEvent('channel.cheer', {
+        user_name: notice.username,
+        bits: notice.bits || 500
+      }, 'irc_usernotice');
+    } else {
+      eventSubClient.triggerEvent('channel.subscribe', {
+        user_name: notice.username,
+        tier: notice.subTier || '1000'
+      }, 'irc_usernotice');
+    }
+  },
   onChatEvent: async (evt) => {
     if (!evt.command) return;
 
@@ -144,6 +183,83 @@ export const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       twitch: twitchConnector.getStatus(),
+      eventsub: eventSubClient.getStatus(),
+      snapshot: arena.getSnapshot()
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/twitch/helix') {
+    const channelStatus = await eventSubClient.fetchChannelStatus(twitchConnector.channel || 'bck_stack');
+    sendJson(res, 200, {
+      ok: true,
+      irc: twitchConnector.getStatus(),
+      eventsub: eventSubClient.getStatus(),
+      helix: channelStatus
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub') {
+    const rawChunks = [];
+    for await (const chunk of req) {
+      rawChunks.push(chunk);
+    }
+    const rawBody = Buffer.concat(rawChunks).toString('utf8');
+    let body = {};
+    try {
+      body = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      body = {};
+    }
+
+    const msgType = req.headers['twitch-eventsub-message-type'] || 'notification';
+    const msgId = req.headers['twitch-eventsub-message-id'] || '';
+    const msgTs = req.headers['twitch-eventsub-message-timestamp'] || '';
+    const sig = req.headers['twitch-eventsub-message-signature'] || '';
+
+    // Verify HMAC-SHA256 signature if Twitch headers are present
+    if (sig && !verifyTwitchEventSubSignature({ messageId: msgId, messageTimestamp: msgTs, rawBody, signatureHeader: sig })) {
+      sendJson(res, 403, { ok: false, error: 'Invalid Twitch EventSub HMAC-SHA256 signature' });
+      return;
+    }
+
+    // Handle official Twitch EventSub webhook verification handshake
+    if (msgType === 'webhook_callback_verification' && body.challenge) {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(String(body.challenge));
+      return;
+    }
+
+    const subType = body?.subscription?.type || body?.type || 'channel.follow';
+    const eventPayload = body?.event || body;
+    const directive = eventSubClient.triggerEvent(subType, eventPayload, 'eventsub_webhook');
+
+    sendJson(res, 200, {
+      ok: true,
+      directive,
+      eventsub: eventSubClient.getStatus(),
+      snapshot: arena.getSnapshot()
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub/simulate') {
+    const body = await readJsonBody(req);
+    const subType = body.type || 'channel.raid';
+    const eventPayload = body.event || {
+      user_name: body.username || 'talhacomak',
+      from_broadcaster_user_name: body.username || 'talhacomak',
+      viewers: body.viewers || 45,
+      bits: body.bits || 500,
+      tier: body.tier || '3000',
+      level: body.level || 4
+    };
+    const directive = eventSubClient.triggerEvent(subType, eventPayload, 'director_eventsub_trigger');
+    sendJson(res, 200, {
+      ok: true,
+      directive,
+      eventsub: eventSubClient.getStatus(),
       snapshot: arena.getSnapshot()
     });
     return;

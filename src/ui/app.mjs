@@ -50,8 +50,50 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       user-select: none;
     }
 
+    html:has(body.obs-transparent),
     body.obs-transparent {
       background: transparent !important;
+    }
+
+    body.obs-transparent .arena-stage {
+      background:
+        linear-gradient(45deg, rgba(15, 23, 42, 0.42) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(15, 23, 42, 0.42) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(15, 23, 42, 0.42) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(15, 23, 42, 0.42) 75%),
+        radial-gradient(circle at 50% 50%, rgba(0, 245, 212, 0.08), rgba(6, 8, 16, 0.55)) !important;
+      background-size: 32px 32px, 32px 32px, 32px 32px, 32px 32px, 100% 100% !important;
+      background-position: 0 0, 0 16px, 16px -16px, -16px 0, 0 0 !important;
+    }
+
+    body.obs-real-capture .arena-stage {
+      background: transparent !important;
+    }
+
+    .obs-alpha-banner {
+      display: none;
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 245, 212, 0.14);
+      border: 1px solid rgba(0, 245, 212, 0.55);
+      color: var(--accent-cyan);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 14px;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 30;
+      backdrop-filter: blur(6px);
+      letter-spacing: 0.5px;
+    }
+
+    body.obs-transparent .obs-alpha-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .app-shell {
@@ -241,10 +283,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       justify-content: center;
       background: radial-gradient(circle at 50% 50%, #0b1120 0%, #05070e 100%);
       overflow: hidden;
-    }
-
-    body.obs-transparent .arena-stage {
-      background: transparent !important;
     }
 
     #arenaCanvas {
@@ -614,6 +652,9 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     <main class="workspace">
       <!-- 60 FPS Vector Physics Canvas Stage -->
       <section class="arena-stage">
+        <div class="obs-alpha-banner">
+          <span>ALPHA CHANNEL ACTIVE (RGBA 0,0,0,0) — OBS BROWSER SOURCE OVERLAY LAYER</span>
+        </div>
         <canvas id="arenaCanvas" width="1280" height="720"></canvas>
 
         <!-- Top Overlay HUD -->
@@ -659,25 +700,35 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
 
       <!-- Right Side Dock: Streamer Director Deck & Codex AST Workbench -->
       <aside class="side-dock">
-        <!-- 1. Real Twitch IRC WebSocket Connector -->
+        <!-- 1. Real Twitch IRC WebSocket & EventSub Bridge -->
         <div class="panel-box">
           <div class="panel-header">
-            <span class="panel-title">1. Live Twitch IRCv3 WebSocket Bridge</span>
-            <span class="check-badge" id="ircBadge">wss://irc-ws.chat.twitch.tv</span>
+            <span class="panel-title">1. Twitch API, IRCv3 Chat &amp; EventSub Bridge</span>
+            <span class="check-badge" id="ircBadge">IRC + EventSub Active</span>
           </div>
           <div class="input-row">
             <input type="text" class="text-input" id="inputTwitchChannel" placeholder="Enter live Twitch channel (e.g. twitchdev, bck_stack)" value="bck_stack" />
             <button class="btn btn-primary" id="btnConnectTwitch">Connect Live IRC</button>
           </div>
-          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px;">
-            Connects directly to any live Twitch channel via IRCv3 tags, or test commands instantly below:
+          <div style="font-size: 10.5px; color: var(--text-dim); margin-bottom: 4px;">
+            Twitch Chat Commands (IRCv3 WebSocket):
           </div>
-          <div class="verb-bar">
+          <div class="verb-bar" style="margin-bottom: 7px;">
             <button class="btn" data-cmd="!slingshot">!slingshot</button>
             <button class="btn" data-cmd="!tether">!tether</button>
             <button class="btn" data-cmd="!parry">!parry</button>
             <button class="btn" data-cmd="!overclock">!overclock</button>
             <button class="btn" data-cmd="!emp">!emp</button>
+          </div>
+          <div style="font-size: 10.5px; color: var(--text-dim); margin-bottom: 4px;">
+            Twitch EventSub Webhooks &amp; WebSocket (follow / sub / cheer / raid / hype_train):
+          </div>
+          <div class="verb-bar">
+            <button class="btn" data-eventsub="channel.follow">+ Follow</button>
+            <button class="btn" data-eventsub="channel.subscribe">★ Sub Ion Strike</button>
+            <button class="btn" data-eventsub="channel.cheer">💎 Cheer 500 Bits</button>
+            <button class="btn" data-eventsub="channel.raid">🚀 Raid (45)</button>
+            <button class="btn btn-accent" data-eventsub="channel.hype_train.begin">🔥 Hype Train</button>
           </div>
         </div>
 
@@ -744,6 +795,9 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     }
     if (params.get('alpha') === '1') {
       document.body.classList.add('obs-transparent');
+    }
+    if (window.obsstudio) {
+      document.body.classList.add('obs-real-capture');
     }
 
     // View Switching Tabs
@@ -866,6 +920,28 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
           state = res.snapshot;
           updateDomHud();
           playSynthPulse(340, 'sine', 0.14);
+        }
+      });
+    });
+
+    // Twitch EventSub Webhook / WebSocket Trigger Buttons
+    document.querySelectorAll('[data-eventsub]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const subType = btn.dataset.eventsub;
+        const viewers = ['talhacomak', 'bck_stack', 'codex_pilot', 'kinetic_nova', 'shader_witch'];
+        const pick = viewers[Math.floor(Math.random() * viewers.length)];
+        const res = await postApi('/api/twitch/eventsub/simulate', {
+          type: subType,
+          username: pick,
+          viewers: 45,
+          bits: 500,
+          tier: '3000',
+          level: 4
+        });
+        if (res.snapshot) {
+          state = res.snapshot;
+          updateDomHud();
+          playSynthPulse(520, 'sawtooth', 0.32);
         }
       });
     });
@@ -1197,6 +1273,22 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.arc(0, 0, boss.radius * 0.65, 0, Math.PI * 2);
         ctx.fill();
 
+        ctx.restore();
+
+        // Direct On-Canvas Boss Label & Health Bar above Boss Core
+        ctx.save();
+        ctx.font = '800 11px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#fda4af';
+        ctx.textAlign = 'center';
+        ctx.fillText('RAID BOSS // ' + (patch.bossSpec.name || 'ANOMALY CORE').toUpperCase(), boss.x, boss.y - boss.radius - 34);
+
+        const barW = 116;
+        const barH = 6;
+        const hpRatio = Math.max(0, Math.min(1, boss.hp / (boss.maxHp || 2400)));
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillRect(boss.x - barW * 0.5, boss.y - boss.radius - 28, barW, barH);
+        ctx.fillStyle = '#ff4d6d';
+        ctx.fillRect(boss.x - barW * 0.5, boss.y - boss.radius - 28, barW * hpRatio, barH);
         ctx.restore();
       }
 

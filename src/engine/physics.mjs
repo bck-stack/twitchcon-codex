@@ -458,6 +458,78 @@ export class ChaosForgeArenaEngine {
   }
 
   /**
+   * Executes a Twitch EventSub directive (`channel.follow`, `channel.subscribe`,
+   * `channel.cheer`, `channel.raid`, `channel.hype_train.begin`, `channel.channel_points_custom_reward_redemption.add`)
+   * inside the 60 FPS arena.
+   */
+  applyEventSubDirective(directive) {
+    if (!directive) return null;
+    const type = directive.eventType || 'channel.custom';
+    const user = directive.username || 'twitch_supporter';
+
+    if (type === 'channel.follow') {
+      const d = this.spawnOrGetDrone(user, '#00F5D4');
+      d.parryUntilSec = this.timeSec + 4.5;
+      this.handleChatCommand({ username: user, command: 'slingshot' });
+    } else if (type === 'channel.subscribe') {
+      const d = this.spawnOrGetDrone(user, '#FEE440');
+      d.overclockUntilSec = this.timeSec + 7.0;
+      this.damageBoss(directive.bossDamage || 320, user, 'Subscriber Orbital Ion Strike');
+      this.shockwaves.push({
+        x: this.boss.x,
+        y: this.boss.y,
+        radius: 18,
+        maxRadius: 460,
+        hue: 52,
+        alpha: 1.0,
+        kind: 'sub_ion_cannon'
+      });
+    } else if (type === 'channel.cheer') {
+      const d = this.spawnOrGetDrone(user, '#9B5DE5');
+      this.handleChatCommand({ username: user, command: 'tether' });
+      this.damageBoss(directive.bossDamage || 420, user, `Cheer ${directive.raidersOrBits} Bits Surge`);
+      this.shockwaves.push({
+        x: d.x,
+        y: d.y,
+        radius: 20,
+        maxRadius: 380,
+        hue: 280,
+        alpha: 1.0,
+        kind: 'cheer_surge'
+      });
+    } else if (type === 'channel.raid') {
+      const count = Math.min(8, Math.max(3, Math.round((directive.raidersOrBits || 20) / 5)));
+      for (let i = 0; i < count; i++) {
+        const raiderName = i === 0 ? user : `${user}_raider_${i}`;
+        const d = this.spawnOrGetDrone(raiderName, '#FF4D6D');
+        d.overclockUntilSec = this.timeSec + 6.0;
+        this.handleChatCommand({ username: raiderName, command: 'slingshot' });
+      }
+      this.damageBoss(directive.bossDamage || 480, user, `Incoming Raid Armada (${directive.raidersOrBits})`);
+    } else if (type === 'channel.hype_train.begin') {
+      for (const d of this.drones.values()) {
+        d.overclockUntilSec = this.timeSec + 8.0;
+        d.parryUntilSec = this.timeSec + 4.0;
+        d.vx *= 1.45;
+        d.vy *= 1.45;
+      }
+      this.damageBoss(directive.bossDamage || 640, 'twitch_hype_train', 'Hype Train Overdrive');
+    } else {
+      this.spawnOrGetDrone(user);
+      this.damageBoss(directive.bossDamage || 180, user, 'Channel Points Redemption');
+    }
+
+    this.spawnCallout(
+      this.boss.x,
+      this.boss.y - 92,
+      directive.headline ? directive.headline.slice(0, 44).toUpperCase() : `EVENTSUB: ${type.toUpperCase()}`,
+      '#FEE440'
+    );
+    this.logEvent('TWITCH_EVENTSUB', directive.headline || `EventSub triggered: ${type}`, directive);
+    return directive;
+  }
+
+  /**
    * Queues a viewer's natural-language `!patch <prompt>` proposal for community voting or instant compilation.
    */
   enqueuePatchProposal({ username, prompt }) {

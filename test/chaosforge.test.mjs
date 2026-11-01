@@ -15,7 +15,12 @@ import {
   evaluateVectorField,
   isAngleBlockedByBossShield
 } from '../src/engine/physics.mjs';
-import { parseTwitchIrcLine } from '../src/twitch/bridge.mjs';
+import {
+  parseTwitchIrcLine,
+  normalizeTwitchEventSubPayload,
+  verifyTwitchEventSubSignature
+} from '../src/twitch/bridge.mjs';
+import crypto from 'node:crypto';
 
 test('ArenaPatchSchema validator enforces Lyapunov energy bounds and rejects executable tokens', () => {
   // 1. Rejects payload with forbidden executable token
@@ -113,3 +118,37 @@ test('ChaosForgeArenaEngine steps deterministically at 60 FPS, links Verlet teth
   assert.equal(snap.activePatch.fieldLaw.type, 'binary_pulsar');
   assert.ok(snap.lastStepDurationMs < 5.0);
 });
+
+test('Twitch EventSub HMAC-SHA256 webhook signature verifier and Raid/HypeTrain directives work end-to-end', () => {
+  const secret = 'test-eventsub-secret';
+  const msgId = 'msg-001';
+  const msgTs = '2026-11-02T00:00:00Z';
+  const rawBody = JSON.stringify({ subscription: { type: 'channel.raid' }, event: { from_broadcaster_user_name: 'talhacomak', viewers: 45 } });
+  const validSig = 'sha256=' + crypto.createHmac('sha256', secret).update(`${msgId}${msgTs}${rawBody}`).digest('hex');
+
+  assert.equal(
+    verifyTwitchEventSubSignature({
+      secret,
+      messageId: msgId,
+      messageTimestamp: msgTs,
+      rawBody,
+      signatureHeader: validSig
+    }),
+    true
+  );
+
+  const raidDirective = normalizeTwitchEventSubPayload('channel.raid', {
+    from_broadcaster_user_name: 'talhacomak',
+    viewers: 45
+  });
+  assert.equal(raidDirective.eventType, 'channel.raid');
+  assert.equal(raidDirective.raidersOrBits, 45);
+  assert.ok(raidDirective.bossDamage > 400);
+
+  const engine = new ChaosForgeArenaEngine({ width: 1280, height: 720 });
+  const beforeHp = engine.boss.hp;
+  engine.applyEventSubDirective(raidDirective);
+  assert.ok(engine.boss.hp < beforeHp, 'Raid EventSub directive must deal immediate kinetic damage to Boss Core');
+  assert.ok(engine.drones.size >= 3, 'Raid EventSub directive must spawn raider fleet drones');
+});
+
