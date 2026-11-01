@@ -1,0 +1,22 @@
+{
+  "name": "chaosforge",
+  "version": "1.0.0",
+  "description": "Live-compiled 60 FPS vector physics boss raid & runtime rule mutator for Twitch streams, built with OpenAI Codex.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/chaosforge.test.mjs"
+  },
+  "keywords": [
+    "twitch",
+    "openai-codex",
+    "twitch-irc",
+    "eventsub",
+    "obs-overlay",
+    "physics-engine",
+    "ast-compiler"
+  ],
+  "author": "bck-stack",
+  "license": "MIT"
+}
