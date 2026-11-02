@@ -1083,12 +1083,12 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             </div>
             <div class="chat-stream-window" id="chatStreamWindow"></div>
 
-            <!-- Real Twitch message composer -->
+            <!-- Chat message composer -->
             <div class="input-row" style="margin-top:4px;">
-              <input type="text" class="text-input" id="inputTwitchMessage" placeholder="Write to the connected Twitch chat..." maxlength="500" />
-              <button class="btn btn-primary" id="btnSendToTwitch" disabled>Send to Twitch</button>
+              <input type="text" class="text-input" id="inputTwitchMessage" placeholder="Type a message or command (!join, !slingshot, !patch)..." maxlength="500" />
+              <button class="btn btn-primary" id="btnSendToTwitch">Send</button>
             </div>
-            <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Authorize your account and connect a live channel to write. Incoming messages appear above automatically.</div>
+            <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Type above or in your Twitch chat to send live messages and drive the 60 FPS arena.</div>
 
           </div>
 
@@ -1571,18 +1571,24 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const input = document.getElementById('inputTwitchMessage');
       const message = input.value.trim();
       if (!message) return;
-      const canWrite = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
-      if (!canWrite) {
-        const helpEl = document.getElementById('twitchMessageHelp');
-        if (helpEl) {
-          const chan = fullData.twitch?.channel || 'offerastudio';
-          helpEl.innerHTML = '<span style="color:var(--accent-amber); font-weight:700;">⚠ Twitch yetkilendirmesi gerekli:</span> Siteden doğrudan Twitch sohbetine mesaj göndermek için yukarıdaki "Connect My Twitch Account" ile hesabınızı bağlayın. <strong>Veya gerçek Twitch canlı testi için:</strong> Kendi kanalınızın Twitch sohbet kutusuna (<a href="https://twitch.tv/' + encodeURIComponent(chan) + '" target="_blank" style="color:var(--accent-cyan); text-decoration:underline;">twitch.tv/' + chan + '</a>) yazın, mesajınız saniyesinde buraya akacaktır!';
-        }
-        return;
-      }
-      const res = await postApi('/api/twitch/say', { message });
-      if (res.ok) input.value = '';
+      input.value = '';
+
+      const canWriteTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
+      const username = fullData.twitch?.identity?.login || fullData.twitch?.channel || 'viewer';
+
+      // Always send to game and chat stream immediately — zero authorization required!
+      const res = await postApi('/api/chat/send', {
+        username,
+        message,
+        source: canWriteTwitch ? `twitch-chat (#${fullData.twitch.channel})` : (fullData.twitch?.channel ? `live-chat (#${fullData.twitch.channel})` : 'live-chat'),
+        badge: canWriteTwitch ? 'TWITCH' : 'CHAT'
+      });
       applyServerPayload(res);
+
+      // If Twitch OAuth is authenticated, also mirror out to Twitch IRC
+      if (canWriteTwitch) {
+        postApi('/api/twitch/say', { message }).catch(() => {});
+      }
     }
 
     document.getElementById('btnSendToTwitch').addEventListener('click', sendToTwitch);
@@ -1774,8 +1780,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const canWriteToTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
       sendToTwitchButton.disabled = false;
       twitchMessageHelp.textContent = canWriteToTwitch
-        ? 'Messages are sent as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Twitch moderation and a conservative rate limit apply.'
-        : 'Authorize your account and connect a live channel to write. Incoming messages appear above automatically.';
+        ? 'Connected as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Messages mirror to Twitch chat and drive the arena.'
+        : 'Type here or in #' + (fullData.twitch?.channel || 'your_channel') + ' Twitch chat to drive the arena live.';
       if (fullData.twitch?.identity?.login) {
         oauthButton.textContent = 'Twitch Authorized: @' + fullData.twitch.identity.login;
         oauthButton.disabled = true;
