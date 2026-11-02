@@ -983,7 +983,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
               <span class="check-badge" id="pane1StatusBadge">wss://irc-ws.chat.twitch.tv:443</span>
             </div>
             <div class="pane-desc">
-              Connects to any live Twitch channel via IRCv3 WebSocket &amp; EventSub. Messages typed on Twitch or below immediately drive the 60 FPS arena.
+              Connects to any public Twitch channel via IRCv3 WebSocket. Real messages typed in Twitch chat immediately drive the 60 FPS arena; the demo controls below are explicitly local-only.
             </div>
           </div>
 
@@ -1003,6 +1003,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
               <button class="btn btn-danger" id="btnDisconnectTwitchAccount" style="white-space:nowrap;" disabled>Disconnect Twitch Account</button>
               <span style="font-size:11px; color:var(--text-dim);">Any public channel can be read; authorization enables replies where Twitch permits them.</span>
             </div>
+            <div id="connectionActivity" style="font-size:11px; color:var(--text-dim); margin-top:8px; max-height:42px; overflow-y:auto;">Connection activity will appear here. It is separate from the viewer chat below.</div>
           </div>
 
           <!-- Full-Height Live Twitch Chat Window -->
@@ -1013,11 +1014,26 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             </div>
             <div class="chat-stream-window" id="chatStreamWindow"></div>
 
-            <!-- Send Message / Command Box -->
+            <!-- Real Twitch message composer -->
+            <div class="input-row" style="margin-top:4px;">
+              <input type="text" class="text-input" id="inputTwitchMessage" placeholder="Write to the connected Twitch chat..." maxlength="500" />
+              <button class="btn btn-primary" id="btnSendToTwitch" disabled>Send to Twitch</button>
+            </div>
+            <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Authorize your account and connect a live channel to write. Incoming messages appear above automatically.</div>
+
+            <!-- Local demo command injector -->
+            <div class="sub-label" style="margin-top:2px;">
+              <span>Studio Demo Command Injector</span>
+              <span style="color:var(--accent-amber);">Does not send to Twitch</span>
+            </div>
             <div class="input-row" style="margin-top:4px;">
               <input type="text" class="text-input" id="inputChatSender" style="max-width:115px;" value="viewer" title="Sender username" />
               <input type="text" class="text-input" id="inputChatMessage" placeholder="Type !slingshot, !tether, or !patch <new rule>..." value="!slingshot" />
-              <button class="btn btn-primary" id="btnSendChat">Send</button>
+              <button class="btn" id="btnSendChat">Inject Demo Command</button>
+            </div>
+            <div class="input-row" style="margin-top:6px;">
+              <button class="btn btn-accent" id="btnRunDemoAudience">Run Demo Audience Sequence</button>
+              <span style="font-size:11px; color:var(--text-dim);">Clearly labeled local viewers for a video when a real audience is not available.</span>
             </div>
             <div class="verb-bar">
               <button class="btn" data-cmd="!slingshot">!slingshot</button>
@@ -1358,6 +1374,35 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
     });
 
+    const DEMO_AUDIENCE_SEQUENCE = [
+      { username: 'orbit_fan', message: '!join' },
+      { username: 'rift_runner', message: '!slingshot' },
+      { username: 'shield_scout', message: '!tether @rift_runner' },
+      { username: 'codex_crew', message: '!patch Add twin binary gravity wells and ricochet prism beams' },
+      { username: 'nova_echo', message: '!parry' },
+      { username: 'live_ops', message: '!overclock' }
+    ];
+    let demoAudienceRunning = false;
+    document.getElementById('btnRunDemoAudience').addEventListener('click', async (event) => {
+      if (demoAudienceRunning) return;
+      demoAudienceRunning = true;
+      event.currentTarget.disabled = true;
+      event.currentTarget.textContent = 'Demo Audience Running…';
+      for (const item of DEMO_AUDIENCE_SEQUENCE) {
+        const res = await postApi('/api/chat/send', {
+          username: item.username,
+          message: item.message,
+          source: 'local-demo-audience',
+          badge: 'DEMO'
+        });
+        applyServerPayload(res);
+        await new Promise((resolve) => setTimeout(resolve, 850));
+      }
+      event.currentTarget.disabled = false;
+      event.currentTarget.textContent = 'Run Demo Audience Sequence';
+      demoAudienceRunning = false;
+    });
+
     // Twitch EventSub Webhook / WebSocket Trigger Buttons
     document.querySelectorAll('[data-eventsub]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1385,6 +1430,23 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
     document.getElementById('btnAuthorizeTwitch').addEventListener('click', () => {
       window.location.assign('/auth/twitch/connect?room=' + encodeURIComponent(ROOM_ID));
+    });
+
+    async function sendToTwitch() {
+      const input = document.getElementById('inputTwitchMessage');
+      const message = input.value.trim();
+      if (!message) return;
+      const res = await postApi('/api/twitch/say', { message });
+      if (res.ok) input.value = '';
+      applyServerPayload(res);
+    }
+
+    document.getElementById('btnSendToTwitch').addEventListener('click', sendToTwitch);
+    document.getElementById('inputTwitchMessage').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendToTwitch();
+      }
     });
 
     document.getElementById('btnLeaveTwitch').addEventListener('click', async () => {
@@ -1462,7 +1524,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     // =========================================================================
     // DOM HUD & 4-PANE RENDERER
     // =========================================================================
-    let lastRenderedChatCount = -1;
+    let lastRenderedChatKey = '';
     let lastRenderedCodexId = null;
 
     function updateDomHud() {
@@ -1530,6 +1592,13 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       }
       const oauthButton = document.getElementById('btnAuthorizeTwitch');
       const disconnectAccountButton = document.getElementById('btnDisconnectTwitchAccount');
+      const sendToTwitchButton = document.getElementById('btnSendToTwitch');
+      const twitchMessageHelp = document.getElementById('twitchMessageHelp');
+      const canWriteToTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
+      sendToTwitchButton.disabled = !canWriteToTwitch;
+      twitchMessageHelp.textContent = canWriteToTwitch
+        ? 'Messages are sent as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Twitch moderation and a conservative rate limit apply.'
+        : 'Authorize your account and connect a live channel to write. Incoming messages appear above automatically.';
       if (fullData.twitch?.identity?.login) {
         oauthButton.textContent = 'Twitch Authorized: @' + fullData.twitch.identity.login;
         oauthButton.disabled = true;
@@ -1546,11 +1615,19 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
       // PANE 1: Render Live Chat Messages Window
       const chatMsgs = fullData.chatMessages || [];
-      if (chatMsgs.length !== lastRenderedChatCount) {
-        lastRenderedChatCount = chatMsgs.length;
+      const chatRenderKey = chatMsgs.map((m) => m.id).join('|');
+      if (chatRenderKey !== lastRenderedChatKey) {
+        lastRenderedChatKey = chatRenderKey;
         const chatWin = document.getElementById('chatStreamWindow');
-        document.getElementById('chatMsgCountLabel').textContent = chatMsgs.length + ' messages';
-        chatWin.innerHTML = chatMsgs
+        const connectionEvents = chatMsgs.filter((m) => m.username === 'system');
+        const viewerMessages = chatMsgs.filter((m) => m.username !== 'system' && m.badge !== 'EVENTSUB');
+        const activityEl = document.getElementById('connectionActivity');
+        activityEl.innerHTML = connectionEvents.length
+          ? connectionEvents.slice(-3).reverse().map((m) => '<div>● ' + escapeHtml(m.message) + '</div>').join('')
+          : 'Connection activity will appear here. It is separate from the viewer chat below.';
+        document.getElementById('chatMsgCountLabel').textContent = viewerMessages.length + ' viewer messages';
+        chatWin.innerHTML = viewerMessages.length
+          ? viewerMessages
           .slice()
           .reverse()
           .map(
@@ -1564,7 +1641,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
               (m.reply ? '<div class="chat-reply-box">↳ ' + escapeHtml(m.reply) + '</div>' : '') +
               '</div>'
           )
-          .join('');
+          .join('')
+          : '<div style="color:var(--text-dim); padding:12px 4px; line-height:1.5;">No viewer messages yet. Open the connected channel’s Twitch chat in another tab and send a message; it will appear here. For a video without viewers, use the clearly labeled Demo Audience Sequence below.</div>';
       }
 
       // PANE 2: Render Codex Prompt & Response Log

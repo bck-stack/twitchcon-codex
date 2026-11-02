@@ -374,6 +374,7 @@ export class TwitchIrcLiveConnector {
     this.reconnectTimer = null;
     this.autoReconnect = false;
     this.connectionOptions = null;
+    this.outboundMessageTimestamps = [];
   }
 
   connect(channelName, requestedOptions) {
@@ -494,8 +495,13 @@ export class TwitchIrcLiveConnector {
   say(messageText) {
     if (this.ws && this.status === 'connected' && this.authenticated && this.channel) {
       const clean = String(messageText || '').replace(/[\r\n]+/g, ' ').trim();
-      if (clean) {
+      const now = Date.now();
+      this.outboundMessageTimestamps = this.outboundMessageTimestamps.filter((at) => at > now - 30_000);
+      // A conservative local guard before Twitch's own chat limits. It applies
+      // to both operator messages and automatic command replies.
+      if (clean && clean.length <= 500 && this.outboundMessageTimestamps.length < 15) {
         this.ws.send(`PRIVMSG #${this.channel} :${clean}`);
+        this.outboundMessageTimestamps.push(now);
         return true;
       }
     }

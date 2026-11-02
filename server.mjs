@@ -41,7 +41,7 @@ function pushCodexLog(room, { author, prompt, compilerMode, compileLatencyMs, pa
 }
 
 function makeRoom(roomId = makeRoomId()) {
-  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), channel: null, twitchIdentity: null } };
+  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), lastTwitchMessageAt: 0, channel: null, twitchIdentity: null } };
   room.eventSub = new TwitchHelixAndEventSubClient({ onEventSubDirective: async (directive) => {
     room.engine.applyEventSubDirective(directive);
     pushChat(room, { username: directive.username || 'twitch_eventsub', color: '#FEE440', message: `[EventSub ${directive.eventType}] ${directive.headline}`, source: 'twitch-eventsub', badge: 'EVENTSUB', reply: `Applied arena kinetic wave (Boss DMG: -${directive.bossDamage || 0})` });
@@ -173,6 +173,22 @@ export const server = http.createServer(async (req, res) => {
       }
       pushChat(room, { username: 'system', message: revoked ? 'Twitch account disconnected and OAuth access revoked.' : 'Twitch account disconnected locally. Revoke access in Twitch Connections if needed.', source: 'twitch-oauth', badge: revoked ? 'REVOKED' : 'DISCONNECTED' });
       sendJson(res, 200, { ...payload(room), revoked }); return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/say') {
+      const message = String(body.message || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
+      if (!message) { sendJson(res, 400, { ok: false, error: 'Enter a Twitch chat message.' }); return; }
+      if (!room.twitch.authenticated || room.twitch.status !== 'connected' || !room.state.twitchIdentity?.login) {
+        sendJson(res, 409, { ok: false, error: 'Authorize your Twitch account and connect a channel before sending to Twitch.' }); return;
+      }
+      if (Date.now() - room.state.lastTwitchMessageAt < 1_200) {
+        sendJson(res, 429, { ok: false, error: 'Chat is rate-limited. Wait a moment before sending again.' }); return;
+      }
+      if (!room.twitch.say(message)) {
+        sendJson(res, 429, { ok: false, error: 'Twitch chat is temporarily rate-limited or unavailable.' }); return;
+      }
+      room.state.lastTwitchMessageAt = Date.now();
+      pushChat(room, { username: room.state.twitchIdentity.login, color: '#86efac', message, source: `twitch-outgoing (#${room.state.channel})`, badge: 'OUTGOING' });
+      sendJson(res, 200, payload(room)); return;
     }
     if (req.method === 'POST' && url.pathname === '/api/chat/send') { const processed = await processIncoming(room, { username: body.username || 'viewer', color: body.color || '#00F5D4', message: body.message, source: body.source || 'studio-live-chat', badge: body.badge || 'CHAT' }); sendJson(res, 200, { ...payload(room), processed }); return; }
     if (req.method === 'POST' && url.pathname === '/api/patch/compile') { const processed = await processIncoming(room, { username: body.author || 'viewer', message: `!patch ${String(body.prompt || '')}`, source: 'codex-mutator', badge: 'CODEX' }); const data = payload(room); sendJson(res, processed?.codexEntry ? 200 : 429, { ...data, ...(processed?.codexEntry ? { compilerMode: processed.codexEntry.compilerMode, compileLatencyMs: processed.codexEntry.compileLatencyMs, patch: room.engine.activePatch, diffs: processed.codexEntry.diffs } : { ok: false, error: processed?.chatEntry?.reply || 'Patch rejected' }) }); return; }
