@@ -89,6 +89,14 @@ Use `GET /healthz` as the deployment health check. Keep `OPENAI_API_KEY`,
 `TWITCH_CLIENT_SECRET`, and `TWITCH_EVENTSUB_SECRET` in host-managed secret
 variables; never enter them in the web UI or commit them to the repository.
 
+### Render Free keep-alive
+
+Render Free web services can spin down after 15 minutes without inbound traffic.
+The companion Cloudflare Scheduled Worker in `infra/chaosforge-keepalive/`
+requests `/healthz` every 10 minutes. It requires no secret and no PC to remain
+online. This reduces idle spin-down risk but does not override Render's Free
+plan restart and monthly-hour limits.
+
 ### Judge demo flow
 
 1. Open the public URL. A fresh room URL is created automatically.

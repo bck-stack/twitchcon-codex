@@ -1,0 +1,7 @@
+name = "chaosforge-keepalive"
+main = "src/index.mjs"
+compatibility_date = "2026-11-02"
+account_id = "2881b685b413b5da17f86e7a35d262df"
+
+[triggers]
+crons = ["*/10 * * * *"]
