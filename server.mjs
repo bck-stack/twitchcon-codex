@@ -15,7 +15,7 @@ const channelRooms = new Map();
 const recentEventSubIds = new Map();
 const oauthStates = new Map();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-const TWITCH_CHAT_SCOPES = ['user:read:chat', 'user:write:chat'];
+const TWITCH_CHAT_SCOPES = ['chat:read', 'chat:edit', 'user:read:chat', 'user:write:chat'];
 
 function nowLabel() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
 function cleanRoomId(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48); }
@@ -249,7 +249,18 @@ export const server = http.createServer(async (req, res) => {
       }
       sendJson(res, 200, payload(room)); return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/twitch/connect') { const channel = cleanChannel(body.channel); if (!channel) { sendJson(res, 400, { ok: false, error: 'Enter a valid Twitch channel name.' }); return; } if (room.state.channel) channelRooms.delete(room.state.channel); room.state.channel = channel; channelRooms.set(channel, room.id); const status = room.twitch.connect(channel); pushChat(room, { username: 'system', message: `Connecting server IRC bridge to #${channel}; anonymous mode reads chat only.`, source: 'twitch-irc', badge: 'SYSTEM' }); sendJson(res, 200, { ...payload(room), status }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/connect') {
+      const channel = cleanChannel(body.channel);
+      if (!channel) { sendJson(res, 400, { ok: false, error: 'Enter a valid Twitch channel name.' }); return; }
+      if (room.state.channel) channelRooms.delete(room.state.channel);
+      room.state.channel = channel; channelRooms.set(channel, room.id);
+      const options = room.state.twitchIdentity
+        ? { oauthToken: room.twitch.getAccessToken(), botNick: room.state.twitchIdentity.login }
+        : { oauthToken: null, botNick: null };
+      const status = room.twitch.connect(channel, options);
+      pushChat(room, { username: 'system', message: `Connecting server IRC bridge to #${channel}; ${options.oauthToken ? 'authenticated mode active.' : 'anonymous mode reads chat only.'}`, source: 'twitch-irc', badge: 'SYSTEM' });
+      sendJson(res, 200, { ...payload(room), status }); return;
+    }
     sendJson(res, 404, { ok: false, error: 'Not found' });
   } catch (error) { sendJson(res, 400, { ok: false, error: error.message || 'Bad request' }); }
 });

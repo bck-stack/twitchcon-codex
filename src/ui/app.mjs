@@ -1571,6 +1571,15 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const input = document.getElementById('inputTwitchMessage');
       const message = input.value.trim();
       if (!message) return;
+      const canWrite = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
+      if (!canWrite) {
+        const helpEl = document.getElementById('twitchMessageHelp');
+        if (helpEl) {
+          const chan = fullData.twitch?.channel || 'offerastudio';
+          helpEl.innerHTML = '<span style="color:var(--accent-amber); font-weight:700;">⚠ Twitch yetkilendirmesi gerekli:</span> Siteden doğrudan Twitch sohbetine mesaj göndermek için yukarıdaki "Connect My Twitch Account" ile hesabınızı bağlayın. <strong>Veya gerçek Twitch canlı testi için:</strong> Kendi kanalınızın Twitch sohbet kutusuna (<a href="https://twitch.tv/' + encodeURIComponent(chan) + '" target="_blank" style="color:var(--accent-cyan); text-decoration:underline;">twitch.tv/' + chan + '</a>) yazın, mesajınız saniyesinde buraya akacaktır!';
+        }
+        return;
+      }
       const res = await postApi('/api/twitch/say', { message });
       if (res.ok) input.value = '';
       applyServerPayload(res);
@@ -1763,7 +1772,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const sendToTwitchButton = document.getElementById('btnSendToTwitch');
       const twitchMessageHelp = document.getElementById('twitchMessageHelp');
       const canWriteToTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
-      sendToTwitchButton.disabled = !canWriteToTwitch;
+      sendToTwitchButton.disabled = false;
       twitchMessageHelp.textContent = canWriteToTwitch
         ? 'Messages are sent as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Twitch moderation and a conservative rate limit apply.'
         : 'Authorize your account and connect a live channel to write. Incoming messages appear above automatically.';

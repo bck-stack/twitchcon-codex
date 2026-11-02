@@ -434,6 +434,20 @@ export class TwitchIrcLiveConnector {
       const chunk = String(event.data || '');
       const lines = chunk.split(/\r?\n/);
       for (const line of lines) {
+        if (/Login authentication failed/i.test(line)) {
+          this.authenticated = false;
+          this.connectionOptions = null;
+          const targetChan = this.channel;
+          this.status = 'connecting';
+          this.onStatusChange(this.getStatus());
+          try { ws.close(); } catch {}
+          setTimeout(() => {
+            if (targetChan) {
+              this.connect(targetChan, { oauthToken: null, botNick: null });
+            }
+          }, 200);
+          return;
+        }
         if (/\s001\s/.test(line)) {
           this.status = 'connected';
           this.reconnectAttempts = 0;
@@ -552,6 +566,10 @@ export class TwitchIrcLiveConnector {
     if (!this.autoReconnect || !this.channel || this.reconnectTimer) return;
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5));
     this.reconnectAttempts += 1;
+    if (this.reconnectAttempts >= 2 && this.connectionOptions?.oauthToken) {
+      this.connectionOptions = null;
+      this.authenticated = false;
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.autoReconnect || !this.channel) return;
