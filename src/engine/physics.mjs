@@ -145,7 +145,8 @@ export class ChaosForgeArenaEngine {
         sourcePrompt: this.activePatch.sourcePrompt,
         compilerMode: this.activePatch.compilerMode || 'genesis',
         appliedAt: Date.now(),
-        diffs: []
+        diffs: [],
+        patchSnapshot: structuredClone(this.activePatch)
       }
     ];
 

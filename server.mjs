@@ -1,398 +1,117 @@
-/**
- * ChaosForge — Local HTTP Server, 60 FPS Arena Loop & Live Twitch IRCv3 Bridge
- */
-
+/** ChaosForge HTTP server: isolated live rooms for Twitch channels and judge demos. */
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { ChaosForgeArenaEngine } from './src/engine/physics.mjs';
-import {
-  compileNaturalLanguagePatch,
-  SIGNATURE_PATCH_PRESETS
-} from './src/compiler/codex-mutator.mjs';
-import { validateAndNormalizePatch } from './src/compiler/schema.mjs';
-import {
-  TwitchIrcLiveConnector,
-  TwitchHelixAndEventSubClient,
-  verifyTwitchEventSubSignature
-} from './src/twitch/bridge.mjs';
+import { compileNaturalLanguagePatch, SIGNATURE_PATCH_PRESETS } from './src/compiler/codex-mutator.mjs';
+import { validateAndNormalizePatch, computePatchDiff } from './src/compiler/schema.mjs';
+import { TwitchIrcLiveConnector, TwitchHelixAndEventSubClient, verifyTwitchEventSubSignature } from './src/twitch/bridge.mjs';
 import { renderChaosForgeHtml } from './src/ui/app.mjs';
 
 const PORT = Number(process.env.PORT || 4400);
+const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
+const PATCH_COOLDOWN_MS = 3_000;
+const rooms = new Map();
+const channelRooms = new Map();
+const recentEventSubIds = new Map();
 
-export const arena = new ChaosForgeArenaEngine({ width: 1280, height: 720 });
+function nowLabel() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
+function cleanRoomId(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48); }
+function cleanChannel(value) { return String(value || '').trim().toLowerCase().replace(/^#/, '').replace(/[^a-z0-9_]/g, '').slice(0, 25); }
+function makeRoomId() { return `room-${crypto.randomBytes(8).toString('hex')}`; }
 
-// Seed initial active Twitch community drones & elastic Verlet tethers so the arena is immediately kinetic
-function seedInitialStageDrones() {
-  const initialSquad = [
-    { username: 'bck_stack', color: '#00F5D4' },
-    { username: 'talhacomak', color: '#FF4D6D' },
-    { username: 'codex_pilot', color: '#FEE440' },
-    { username: 'shader_witch', color: '#9B5DE5' },
-    { username: 'kinetic_nova', color: '#00BBF9' },
-    { username: 'vector_monk', color: '#F15BB5' }
-  ];
-
-  for (const v of initialSquad) {
-    arena.handleChatCommand({ username: v.username, color: v.color, command: 'join' });
-  }
-
-  arena.handleChatCommand({
-    username: 'bck_stack',
-    color: '#00F5D4',
-    command: 'tether',
-    argsText: '@talhacomak'
-  });
-  arena.handleChatCommand({
-    username: 'codex_pilot',
-    color: '#FEE440',
-    command: 'tether',
-    argsText: '@shader_witch'
-  });
+function pushChat(room, { username, color = '#00F5D4', message, source = 'studio', badge = 'CHAT', reply = null }) {
+  const entry = { id: `chat-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, timestamp: nowLabel(), username: String(username || 'viewer').replace(/^@/, '').slice(0, 40), color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#00F5D4', message: String(message || '').slice(0, 600), source: String(source).slice(0, 80), badge: String(badge).slice(0, 40), reply: reply ? String(reply).slice(0, 700) : null };
+  room.state.chatMessages.push(entry);
+  if (room.state.chatMessages.length > 60) room.state.chatMessages.shift();
+  return entry;
 }
 
-seedInitialStageDrones();
-
-// Live Twitch Helix REST API & EventSub (Webhook + WebSocket) Client
-export const eventSubClient = new TwitchHelixAndEventSubClient({
-  onEventSubDirective: async (directive) => {
-    arena.applyEventSubDirective(directive);
-    if (directive.eventType === 'channel.hype_train.begin') {
-      const compiled = await compileNaturalLanguagePatch({
-        prompt: 'Hype Train Overdrive: Binary pulsar gravity wells with 3.4x tether whips and prism ricochet lasers',
-        author: 'twitch_eventsub_hypetrain',
-        currentPatch: arena.activePatch
-      });
-      if (compiled.ok) {
-        arena.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation);
-      }
-    }
-  }
-});
-
-// Live Twitch IRCv3 WebSocket Connector
-export const twitchConnector = new TwitchIrcLiveConnector({
-  onUserNotice: (notice) => {
-    if (notice.msgId === 'raid') {
-      eventSubClient.triggerEvent('channel.raid', {
-        from_broadcaster_user_name: notice.username,
-        viewers: notice.raidViewerCount
-      }, 'irc_usernotice');
-    } else if (notice.msgId === 'cheer') {
-      eventSubClient.triggerEvent('channel.cheer', {
-        user_name: notice.username,
-        bits: notice.bits || 500
-      }, 'irc_usernotice');
-    } else {
-      eventSubClient.triggerEvent('channel.subscribe', {
-        user_name: notice.username,
-        tier: notice.subTier || '1000'
-      }, 'irc_usernotice');
-    }
-  },
-  onChatEvent: async (evt) => {
-    if (!evt.command) return;
-
-    if (evt.command === 'patch') {
-      const proposal = arena.enqueuePatchProposal({
-        username: evt.username,
-        prompt: evt.argsText
-      });
-      if (proposal) {
-        const compiled = await compileNaturalLanguagePatch({
-          prompt: evt.argsText,
-          author: evt.username,
-          currentPatch: arena.activePatch
-        });
-        if (compiled.ok) {
-          arena.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation);
-        }
-      }
-      return;
-    }
-
-    if (evt.command === 'vote') {
-      arena.votePatchProposal({ username: evt.username, indexOrId: evt.argsText });
-      return;
-    }
-
-    arena.handleChatCommand({
-      username: evt.username,
-      color: evt.color,
-      command: evt.command,
-      argsText: evt.argsText
-    });
-  }
-});
-
-// Deterministic 60 FPS Server Physics Tick + Autonomous Community Kinetic Reflexes
-let simInterval = setInterval(() => {
-  arena.step(1 / 60);
-
-  // Every ~1.8 seconds, let orbiting drones execute tactical slingshots/parries so the raid stays intense
-  if (arena.tickCount % 110 === 0 && arena.drones.size > 0) {
-    const dronesArr = Array.from(arena.drones.values());
-    const actor = dronesArr[(arena.tickCount / 110) % dronesArr.length];
-    const actions = ['slingshot', 'parry', 'overclock', 'tether'];
-    const chosen = actions[(arena.tickCount / 110) % actions.length];
-    arena.handleChatCommand({
-      username: actor.username,
-      color: actor.color,
-      command: chosen
-    });
-  }
-}, 1000 / 60);
-
-function readJsonBody(req) {
-  return new Promise((resolve) => {
-    let raw = '';
-    req.on('data', (chunk) => {
-      raw += chunk;
-      if (raw.length > 64_000) req.destroy();
-    });
-    req.on('end', () => {
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch {
-        resolve({});
-      }
-    });
-  });
+function explainPatch(patch, diffs) { return `Compiled "${patch.title}" (${diffs.length} parameters mutated). Field: ${patch.fieldLaw.type}; Boss: ${patch.bossSpec.chassis}; tether bonus: ${patch.droneLaw.tetherDamageBonus}x.`; }
+function pushCodexLog(room, { author, prompt, compilerMode, compileLatencyMs, patch, diffs }) {
+  const entry = { id: `cdx-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, timestamp: nowLabel(), author: String(author || 'viewer').replace(/^@/, '').slice(0, 40), prompt: String(prompt || '').slice(0, 600), compilerMode: compilerMode || 'semantic-ast', compileLatencyMs: compileLatencyMs || 0, patchTitle: patch.title, patchId: patch.patchId, replyText: explainPatch(patch, diffs || []), diffs: (diffs || []).slice(0, 12), astPreview: { fieldLaw: patch.fieldLaw, bossSpec: patch.bossSpec, droneLaw: patch.droneLaw } };
+  room.state.codexLogs.unshift(entry);
+  if (room.state.codexLogs.length > 20) room.state.codexLogs.length = 20;
+  room.state.lastDiffs = entry.diffs;
+  return entry;
 }
 
-function sendJson(res, status, payload) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store'
+function makeRoom(roomId = makeRoomId()) {
+  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), channel: null } };
+  room.eventSub = new TwitchHelixAndEventSubClient({ onEventSubDirective: async (directive) => {
+    room.engine.applyEventSubDirective(directive);
+    pushChat(room, { username: directive.username || 'twitch_eventsub', color: '#FEE440', message: `[EventSub ${directive.eventType}] ${directive.headline}`, source: 'twitch-eventsub', badge: 'EVENTSUB', reply: `Applied arena kinetic wave (Boss DMG: -${directive.bossDamage || 0})` });
+  }});
+  room.twitch = new TwitchIrcLiveConnector({
+    onUserNotice: (notice) => room.eventSub.triggerEvent(notice.msgId === 'raid' ? 'channel.raid' : notice.msgId === 'cheer' ? 'channel.cheer' : 'channel.subscribe', { user_name: notice.username, from_broadcaster_user_name: notice.username, viewers: notice.raidViewerCount, bits: notice.bits, tier: notice.subTier }, 'irc_usernotice'),
+    onChatEvent: (evt) => processIncoming(room, { username: evt.username, color: evt.color || '#00F5D4', message: evt.message, source: `twitch-irc (#${evt.channel})`, badge: evt.isMod ? 'MOD' : evt.isSub ? 'SUB' : 'TWITCH' })
   });
-  res.end(JSON.stringify(payload));
+  rooms.set(room.id, room);
+  return room;
 }
+function getRoom(roomId, create = true) { const id = cleanRoomId(roomId); let room = id && rooms.get(id); if (!room && create) room = makeRoom(id || makeRoomId()); if (room) room.lastAccessAt = Date.now(); return room; }
+
+async function processIncoming(room, { username, color = '#00F5D4', message, source = 'studio', badge = 'CHAT' }) {
+  const text = String(message || '').trim().slice(0, 600); if (!text) return null;
+  const author = String(username || 'viewer').replace(/^@/, '').toLowerCase().slice(0, 40) || 'viewer'; let reply = null; let codexEntry = null;
+  if (text.startsWith('!')) {
+    const [commandRaw, ...parts] = text.slice(1).trim().split(/\s+/); const command = (commandRaw || '').toLowerCase(); const argsText = parts.join(' ');
+    if (command === 'patch') {
+      const last = room.state.lastPatchByAuthor.get(author) || 0;
+      if (Date.now() - last < PATCH_COOLDOWN_MS) reply = 'Patch cooldown: wait a few seconds before your next live rule change.';
+      else {
+        room.state.lastPatchByAuthor.set(author, Date.now()); const prompt = argsText || 'Split gravity into twin binary pulsar wells with prism ricochet beams'; const previous = structuredClone(room.engine.activePatch);
+        const compiled = await compileNaturalLanguagePatch({ prompt, author, currentPatch: previous });
+        if (compiled.ok) { room.engine.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation); codexEntry = pushCodexLog(room, { author, prompt, compilerMode: compiled.compilerMode, compileLatencyMs: compiled.compileLatencyMs, patch: compiled.patch, diffs: compiled.diffs }); reply = `CODEX AST HOT-SWAP -> [${compiled.patch.title}] (${compiled.diffs.length} rules changed)`; }
+        else reply = `GUARDRAIL REJECTED !patch: ${(compiled.validation?.rejectedReasons || ['Unsafe AST']).join(', ')}`;
+      }
+    } else if (command === 'vote') { const voted = room.engine.votePatchProposal({ username: author, indexOrId: argsText }); reply = voted ? `Vote recorded for "${voted.prompt}" (${voted.votes} votes)` : 'No active patch proposal to vote on'; }
+    else { const result = room.engine.handleChatCommand({ username: author, color, command, argsText }); reply = result.ok ? `@${author} activated ${result.action}.` : `Unknown command !${command}. Try !join, !slingshot, !tether, !parry, !overclock, !emp, or !patch <rule>.`; }
+  } else room.engine.spawnOrGetDrone(author, color);
+  const chatEntry = pushChat(room, { username: author, color, message: text, source, badge, reply }); if (reply && room.twitch.authenticated) room.twitch.say(`[ChaosForge] ${reply}`); return { chatEntry, codexEntry };
+}
+
+function payload(room) { return { ok: true, room: { id: room.id, expiresAt: room.createdAt + ROOM_TTL_MS }, twitch: room.twitch.getStatus(), eventsub: room.eventSub.getStatus(), codex: { connected: true, hasApiKey: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-4o-mini', schemaName: 'ArenaPatchSchema v1 (strict)', logs: room.state.codexLogs }, chatMessages: room.state.chatMessages, lastDiffs: room.state.lastDiffs, lastGuardrailReport: room.state.lastGuardrailReport, snapshot: room.engine.getSnapshot() }; }
+const SECURITY_HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://irc-ws.chat.twitch.tv; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'" };
+function sendJson(res, status, body) { res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); }
+function readRawBody(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', (chunk) => { raw += chunk; if (raw.length > 64_000) { reject(new Error('Request body too large')); req.destroy(); } }); req.on('end', () => resolve(raw)); req.on('error', reject); }); }
+async function readJsonBody(req) { const raw = await readRawBody(req); try { return raw ? JSON.parse(raw) : {}; } catch { throw new Error('Invalid JSON body'); } }
+function roomFrom(url, body) { return getRoom(body?.roomId || url.searchParams.get('room')); }
 
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/overlay' || url.pathname === '/codex')) {
-    const html = renderChaosForgeHtml({
-      initialSnapshot: arena.getSnapshot(),
-      presets: SIGNATURE_PATCH_PRESETS
-    });
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
-    return;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/state') {
-    sendJson(res, 200, {
-      ok: true,
-      twitch: twitchConnector.getStatus(),
-      eventsub: eventSubClient.getStatus(),
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/twitch/helix') {
-    const channelStatus = await eventSubClient.fetchChannelStatus(twitchConnector.channel || 'bck_stack');
-    sendJson(res, 200, {
-      ok: true,
-      irc: twitchConnector.getStatus(),
-      eventsub: eventSubClient.getStatus(),
-      helix: channelStatus
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub') {
-    const rawChunks = [];
-    for await (const chunk of req) {
-      rawChunks.push(chunk);
+  try {
+    if (req.method === 'GET' && url.pathname === '/favicon.ico') { res.writeHead(204, SECURITY_HEADERS); res.end(); return; }
+    if (req.method === 'GET' && url.pathname === '/healthz') { sendJson(res, 200, { ok: true, rooms: rooms.size, uptimeSec: Math.round(process.uptime()) }); return; }
+    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/overlay' || url.pathname === '/codex')) {
+      let room = getRoom(url.searchParams.get('room'), false);
+      if (!room) { room = makeRoom(); const next = new URL(url.pathname, `http://${req.headers.host}`); next.searchParams.set('room', room.id); res.writeHead(302, { Location: `${next.pathname}${next.search}` }); res.end(); return; }
+      const html = renderChaosForgeHtml({ initialPayload: payload(room), presets: SIGNATURE_PATCH_PRESETS }); res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); return;
     }
-    const rawBody = Buffer.concat(rawChunks).toString('utf8');
-    let body = {};
-    try {
-      body = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      body = {};
+    if (req.method === 'GET' && url.pathname === '/api/state') { const room = roomFrom(url); sendJson(res, 200, payload(room)); return; }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub') {
+      const rawBody = await readRawBody(req); let eventBody;
+      try { eventBody = rawBody ? JSON.parse(rawBody) : {}; } catch { sendJson(res, 400, { ok: false, error: 'Invalid EventSub JSON body.' }); return; }
+      const msgId = req.headers['twitch-eventsub-message-id']; const msgTs = req.headers['twitch-eventsub-message-timestamp']; const signature = req.headers['twitch-eventsub-message-signature']; const secret = process.env.TWITCH_EVENTSUB_SECRET;
+      const timestamp = Date.parse(String(msgTs || ''));
+      const freshTimestamp = Number.isFinite(timestamp) && Math.abs(Date.now() - timestamp) <= 10 * 60 * 1000;
+      if (!secret || !msgId || !freshTimestamp || !signature || !verifyTwitchEventSubSignature({ secret, messageId: msgId, messageTimestamp: msgTs, rawBody, signatureHeader: signature })) { sendJson(res, 403, { ok: false, error: 'Valid, recent Twitch EventSub signature and server secret required.' }); return; }
+      if (recentEventSubIds.has(msgId)) { sendJson(res, 202, { ok: true, duplicate: true }); return; }
+      recentEventSubIds.set(msgId, Date.now());
+      if (req.headers['twitch-eventsub-message-type'] === 'webhook_callback_verification' && eventBody.challenge) { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(String(eventBody.challenge)); return; }
+      const requestedRoom = cleanRoomId(url.searchParams.get('room')); const room = getRoom(requestedRoom, false);
+      if (!room) { sendJson(res, 404, { ok: false, error: 'EventSub room is unavailable.' }); return; }
+      const directive = room.eventSub.triggerEvent(eventBody?.subscription?.type || 'channel.follow', eventBody.event || {}, 'eventsub_webhook'); sendJson(res, 200, { ...payload(room), directive }); return;
     }
-
-    const msgType = req.headers['twitch-eventsub-message-type'] || 'notification';
-    const msgId = req.headers['twitch-eventsub-message-id'] || '';
-    const msgTs = req.headers['twitch-eventsub-message-timestamp'] || '';
-    const sig = req.headers['twitch-eventsub-message-signature'] || '';
-
-    // Verify HMAC-SHA256 signature if Twitch headers are present
-    if (sig && !verifyTwitchEventSubSignature({ messageId: msgId, messageTimestamp: msgTs, rawBody, signatureHeader: sig })) {
-      sendJson(res, 403, { ok: false, error: 'Invalid Twitch EventSub HMAC-SHA256 signature' });
-      return;
-    }
-
-    // Handle official Twitch EventSub webhook verification handshake
-    if (msgType === 'webhook_callback_verification' && body.challenge) {
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end(String(body.challenge));
-      return;
-    }
-
-    const subType = body?.subscription?.type || body?.type || 'channel.follow';
-    const eventPayload = body?.event || body;
-    const directive = eventSubClient.triggerEvent(subType, eventPayload, 'eventsub_webhook');
-
-    sendJson(res, 200, {
-      ok: true,
-      directive,
-      eventsub: eventSubClient.getStatus(),
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub/simulate') {
-    const body = await readJsonBody(req);
-    const subType = body.type || 'channel.raid';
-    const eventPayload = body.event || {
-      user_name: body.username || 'talhacomak',
-      from_broadcaster_user_name: body.username || 'talhacomak',
-      viewers: body.viewers || 45,
-      bits: body.bits || 500,
-      tier: body.tier || '3000',
-      level: body.level || 4
-    };
-    const directive = eventSubClient.triggerEvent(subType, eventPayload, 'director_eventsub_trigger');
-    sendJson(res, 200, {
-      ok: true,
-      directive,
-      eventsub: eventSubClient.getStatus(),
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/patch/compile') {
-    const body = await readJsonBody(req);
-    const compiled = await compileNaturalLanguagePatch({
-      prompt: body.prompt,
-      author: body.author || 'streamer_director',
-      currentPatch: arena.activePatch
-    });
-
-    if (!compiled.ok) {
-      sendJson(res, 400, compiled);
-      return;
-    }
-
-    arena.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation);
-    sendJson(res, 200, {
-      ok: true,
-      compilerMode: compiled.compilerMode,
-      compileLatencyMs: compiled.compileLatencyMs,
-      patch: compiled.patch,
-      diffs: compiled.diffs,
-      validation: compiled.validation,
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/chat/command') {
-    const body = await readJsonBody(req);
-    const result = arena.handleChatCommand({
-      username: body.username || 'twitch_viewer',
-      color: body.color || null,
-      command: body.command || 'slingshot',
-      argsText: body.argsText || ''
-    });
-    sendJson(res, 200, {
-      ok: result.ok,
-      result,
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/stage/surge') {
-    const crowd = [
-      ['bck_stack', '#00F5D4'],
-      ['talhacomak', '#FF4D6D'],
-      ['codex_pilot', '#FEE440'],
-      ['shader_witch', '#9B5DE5'],
-      ['kinetic_nova', '#00BBF9'],
-      ['vector_monk', '#F15BB5'],
-      ['orbital_lynx', '#38B000'],
-      ['prism_hacker', '#FF9E00'],
-      ['gauss_viper', '#00F5D4'],
-      ['tether_queen', '#FF4D6D']
-    ];
-    for (const [u, c] of crowd) {
-      arena.handleChatCommand({ username: u, color: c, command: 'slingshot' });
-    }
-    arena.handleChatCommand({ username: 'orbital_lynx', command: 'tether', argsText: '@prism_hacker' });
-    arena.handleChatCommand({ username: 'gauss_viper', command: 'tether', argsText: '@tether_queen' });
-    arena.handleChatCommand({ username: 'bck_stack', command: 'parry' });
-
-    sendJson(res, 200, {
-      ok: true,
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/patch/rollback') {
-    const body = await readJsonBody(req);
-    const rolled = arena.rollbackToPatch(body.patchId);
-    if (!rolled) {
-      sendJson(res, 404, { ok: false, error: 'Patch ID not found in history' });
-      return;
-    }
-    sendJson(res, 200, {
-      ok: true,
-      patch: rolled,
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/patch/test-guardrail') {
-    const adversarial = {
-      title: 'Malicious Injection eval(window.location)',
-      fieldLaw: {
-        type: 'zero_g_drift',
-        gravityStrength: 999999,
-        vortexTorque: -999999,
-        damping: 0.999,
-        restitution: 2.85,
-        tetherStiffness: 4.0
-      }
-    };
-    const report = validateAndNormalizePatch(adversarial);
-    arena.logEvent(
-      'GUARDRAIL_BLOCKED',
-      `AST Guardrail blocked unsafe payload: ${report.rejectedReasons[0] || 'Lyapunov divergence clamped'}`,
-      { report }
-    );
-    sendJson(res, 200, {
-      ok: true,
-      blocked: !report.valid,
-      report,
-      snapshot: arena.getSnapshot()
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/twitch/connect') {
-    const body = await readJsonBody(req);
-    try {
-      const status = twitchConnector.connect(body.channel || 'bck_stack');
-      arena.logEvent('TWITCH_IRC_CONNECT', `Connected live IRCv3 WebSocket to #${status.channel}`);
-      sendJson(res, 200, { ok: true, status });
-    } catch (err) {
-      sendJson(res, 400, { ok: false, error: err.message });
-    }
-    return;
-  }
-
-  sendJson(res, 404, { ok: false, error: 'Not found' });
+    const body = req.method === 'POST' ? await readJsonBody(req) : null; const room = roomFrom(url, body);
+    if (req.method === 'POST' && url.pathname === '/api/chat/send') { const processed = await processIncoming(room, { username: body.username || 'viewer', color: body.color || '#00F5D4', message: body.message, source: body.source || 'studio-live-chat', badge: body.badge || 'CHAT' }); sendJson(res, 200, { ...payload(room), processed }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/patch/compile') { const processed = await processIncoming(room, { username: body.author || 'viewer', message: `!patch ${String(body.prompt || '')}`, source: 'codex-mutator', badge: 'CODEX' }); const data = payload(room); sendJson(res, processed?.codexEntry ? 200 : 429, { ...data, ...(processed?.codexEntry ? { compilerMode: processed.codexEntry.compilerMode, compileLatencyMs: processed.codexEntry.compileLatencyMs, patch: room.engine.activePatch, diffs: processed.codexEntry.diffs } : { ok: false, error: processed?.chatEntry?.reply || 'Patch rejected' }) }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/patch/rollback') { const previous = structuredClone(room.engine.activePatch); const rolled = room.engine.rollbackToPatch(body.patchId); if (!rolled) { sendJson(res, 404, { ok: false, error: 'Patch ID not found in this room history' }); return; } const diffs = computePatchDiff(previous, rolled); pushCodexLog(room, { author: 'room_rollback', prompt: `Rollback to ${rolled.title}`, compilerMode: 'ast-snapshot-rollback', compileLatencyMs: 0.1, patch: rolled, diffs }); sendJson(res, 200, { ...payload(room), patch: rolled, diffs }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/patch/test-guardrail') { const energy = body.scenario === 'energy_divergence'; const adversarial = energy ? { title: 'Unbounded Kinetic Explosion', fieldLaw: { type: 'zero_g_drift', gravityStrength: 9999, vortexTorque: -9999, damping: 0.999, restitution: 2.85, tetherStiffness: 4.5 }, bossSpec: { name: 'Divergent Boss', chassis: 'gyro_seraph', shieldArcs: 12, rotationSpeed: 15, aggression: 9, projectileSpeed: 4000, behaviorSequence: ['ricochet_prism_beam'] } } : { title: 'Malicious Exploit eval(window.location)', fieldLaw: { type: 'central_attractor', gravityStrength: 'function(){ return eval("alert(1)"); }' } }; const report = validateAndNormalizePatch(adversarial); room.state.lastGuardrailReport = { testedAt: nowLabel(), scenario: energy ? 'Energy divergence' : 'Executable code injection', blocked: !report.valid, clampedWarnings: report.warnings || [], inputPayload: adversarial, report }; sendJson(res, 200, { ...payload(room), guardrailResult: room.state.lastGuardrailReport }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub/simulate') { const directive = room.eventSub.triggerEvent(body.type || 'channel.raid', body.event || { user_name: body.username || 'viewer', from_broadcaster_user_name: body.username || 'viewer', viewers: body.viewers || 45, bits: body.bits || 500, tier: body.tier || '3000', level: body.level || 4 }, 'studio_simulation'); sendJson(res, 200, { ...payload(room), directive }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/connect') { const channel = cleanChannel(body.channel); if (!channel) { sendJson(res, 400, { ok: false, error: 'Enter a valid Twitch channel name.' }); return; } if (room.state.channel) channelRooms.delete(room.state.channel); room.state.channel = channel; channelRooms.set(channel, room.id); const status = room.twitch.connect(channel); pushChat(room, { username: 'system', message: `Connecting server IRC bridge to #${channel}; anonymous mode reads chat only.`, source: 'twitch-irc', badge: 'SYSTEM' }); sendJson(res, 200, { ...payload(room), status }); return; }
+    sendJson(res, 404, { ok: false, error: 'Not found' });
+  } catch (error) { sendJson(res, 400, { ok: false, error: error.message || 'Bad request' }); }
 });
 
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}` || process.argv[1]?.endsWith('server.mjs')) {
-  server.listen(PORT, () => {
-    console.log(`ChaosForge Live Vector Physics & Codex AST Server running at http://localhost:${PORT}`);
-  });
-}
+setInterval(() => { const cutoff = Date.now() - ROOM_TTL_MS; for (const [id, room] of rooms) { room.engine.step(1 / 60); if (room.lastAccessAt < cutoff) { room.twitch.disconnect(); rooms.delete(id); if (room.state.channel) channelRooms.delete(room.state.channel); } } for (const [id, at] of recentEventSubIds) if (at < Date.now() - 10 * 60 * 1000) recentEventSubIds.delete(id); }, 1000 / 60);
+if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` || process.argv[1]?.endsWith('server.mjs')) server.listen(PORT, () => console.log(`ChaosForge running at http://localhost:${PORT}`));

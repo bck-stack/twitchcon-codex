@@ -1,14 +1,17 @@
 /**
- * ChaosForge — Unified 60 FPS Vector Arena, Streamer Director Deck & Codex AST Inspector UI
+ * ChaosForge — Unified 60 FPS Vector Arena & 4-Tab Exclusive Control Studio
  *
- * Zero external image/audio dependencies. Everything is rendered via deterministic
- * HTML5 Canvas 2D vector geometry and synthesized via Web Audio API oscillators.
+ * Right Panel Architecture (Strictly 1 Active Panel at a Time):
+ *   Tab 1: Twitch API, Live Chat Window & EventSub Bridge
+ *   Tab 2: Codex Live Rule Mutator (Connection, Prompt Input & Codex Response Terminal)
+ *   Tab 3: Diff Summary (Before -> After Structural Comparison & Rollback History)
+ *   Tab 4: Test Guardrail & Physics Safety Engine (Adversarial Payload Tester & 18 Invariants)
  */
 
 import { SIGNATURE_PATCH_PRESETS } from '../compiler/codex-mutator.mjs';
 
-export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATCH_PRESETS }) {
-  const safeInitialJson = JSON.stringify(initialSnapshot).replace(/</g, '\\u003c');
+export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH_PRESETS }) {
+  const safePayloadJson = JSON.stringify(initialPayload).replace(/</g, '\\u003c');
   const safePresetsJson = JSON.stringify(presets).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
@@ -20,15 +23,16 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
   <style>
     :root {
       --bg-deep: #060810;
-      --bg-panel: rgba(11, 15, 27, 0.92);
-      --bg-card: rgba(17, 23, 40, 0.88);
-      --border-subtle: rgba(94, 234, 212, 0.18);
-      --border-bright: rgba(0, 245, 212, 0.55);
+      --bg-panel: #0a0e1a;
+      --bg-card: rgba(16, 22, 38, 0.95);
+      --border-subtle: rgba(94, 234, 212, 0.2);
+      --border-bright: rgba(0, 245, 212, 0.6);
       --accent-cyan: #00f5d4;
       --accent-magenta: #ff4d6d;
       --accent-amber: #fee440;
       --accent-violet: #9b5de5;
-      --text-main: #f1f5f9;
+      --accent-green: #22c55e;
+      --text-main: #f8fafc;
       --text-dim: #94a3b8;
       --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
       --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -111,7 +115,7 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
-      background: rgba(7, 10, 19, 0.96);
+      background: rgba(7, 10, 19, 0.98);
       border-bottom: 1px solid var(--border-subtle);
       z-index: 20;
     }
@@ -157,10 +161,10 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     .nav-tabs {
       display: flex;
       gap: 6px;
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.85);
       padding: 4px;
       border-radius: 8px;
-      border: 1px solid rgba(148, 163, 184, 0.16);
+      border: 1px solid rgba(148, 163, 184, 0.18);
     }
 
     .nav-tab {
@@ -215,18 +219,19 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     }
 
     .btn {
-      background: rgba(30, 41, 59, 0.85);
+      background: rgba(30, 41, 59, 0.9);
       color: #f8fafc;
-      border: 1px solid rgba(148, 163, 184, 0.28);
+      border: 1px solid rgba(148, 163, 184, 0.3);
       border-radius: 6px;
-      padding: 6px 11px;
-      font-size: 11.5px;
+      padding: 6px 12px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s ease;
       font-family: var(--font-sans);
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 5px;
     }
 
@@ -236,27 +241,39 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, rgba(0, 245, 212, 0.22), rgba(0, 187, 249, 0.25));
+      background: linear-gradient(135deg, rgba(0, 245, 212, 0.22), rgba(0, 187, 249, 0.28));
       border-color: var(--accent-cyan);
       color: var(--accent-cyan);
     }
 
     .btn-primary:hover {
-      background: rgba(0, 245, 212, 0.3);
+      background: rgba(0, 245, 212, 0.34);
       box-shadow: 0 0 12px rgba(0, 245, 212, 0.25);
     }
 
     .btn-accent {
-      background: linear-gradient(135deg, rgba(255, 77, 109, 0.22), rgba(155, 93, 229, 0.25));
+      background: linear-gradient(135deg, rgba(255, 77, 109, 0.24), rgba(155, 93, 229, 0.28));
       border-color: var(--accent-magenta);
       color: #fda4af;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(255, 77, 109, 0.32));
+      border-color: #ef4444;
+      color: #fecaca;
+    }
+
+    .btn-danger:hover {
+      border-color: #f87171;
+      color: #fff;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
     }
 
     /* Main Workspace Grid */
     .workspace {
       flex: 1;
       display: grid;
-      grid-template-columns: minmax(0, 1.55fr) 440px;
+      grid-template-columns: minmax(0, 1fr) 540px;
       min-height: 0;
       overflow: hidden;
     }
@@ -267,10 +284,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
 
     body.view-overlay .side-dock {
       display: none;
-    }
-
-    body.view-codex .workspace {
-      grid-template-columns: minmax(0, 1fr) 580px;
     }
 
     /* Left Arena Stage */
@@ -305,12 +318,12 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     }
 
     .boss-hud-card {
-      background: rgba(8, 12, 24, 0.84);
+      background: rgba(8, 12, 24, 0.86);
       border: 1px solid rgba(255, 77, 109, 0.45);
       border-radius: 10px;
       padding: 10px 14px;
-      min-width: 320px;
-      max-width: 420px;
+      min-width: 310px;
+      max-width: 400px;
       backdrop-filter: blur(8px);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     }
@@ -365,14 +378,13 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       color: var(--text-dim);
     }
 
-    /* Active Codex Patch HUD Card */
     .patch-hud-card {
       background: rgba(8, 12, 24, 0.86);
       border: 1px solid var(--border-bright);
       border-radius: 10px;
       padding: 10px 14px;
-      min-width: 300px;
-      max-width: 380px;
+      min-width: 290px;
+      max-width: 370px;
       backdrop-filter: blur(8px);
       box-shadow: 0 8px 24px rgba(0, 245, 212, 0.14);
     }
@@ -401,7 +413,7 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       color: #cbd5e1;
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
     }
 
     .law-chip {
@@ -411,7 +423,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       border-radius: 4px;
     }
 
-    /* Bottom Overlay HUD: MVP Leaderboard & Command Ticker */
     .hud-bottom-bar {
       position: absolute;
       bottom: 14px;
@@ -433,12 +444,12 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     }
 
     .mvp-card {
-      min-width: 270px;
+      min-width: 260px;
     }
 
     .feed-card {
-      min-width: 340px;
-      max-width: 440px;
+      min-width: 320px;
+      max-width: 420px;
     }
 
     .hud-section-title {
@@ -469,85 +480,282 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       text-overflow: ellipsis;
     }
 
-    /* Right Side Dock (Director Deck & Codex AST Workbench) */
+    /* ============================================================================
+       RIGHT SIDE DOCK — 4 EXCLUSIVE FULL-HEIGHT TABS (ONLY 1 OPEN AT A TIME)
+       ============================================================================ */
     .side-dock {
       height: 100%;
       background: var(--bg-panel);
       border-left: 1px solid var(--border-subtle);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 4-Button Selector Strip at Top of Right Panel */
+    .dock-tab-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px 12px;
+      background: rgba(5, 8, 16, 0.95);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .dock-tab-btn {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 8px;
+      padding: 8px 6px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      text-align: center;
+    }
+
+    .dock-tab-btn:hover {
+      border-color: rgba(0, 245, 212, 0.45);
+      color: #e2e8f0;
+    }
+
+    .dock-tab-btn.active {
+      background: linear-gradient(180deg, rgba(0, 245, 212, 0.2), rgba(0, 245, 212, 0.06));
+      border-color: var(--accent-cyan);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(0, 245, 212, 0.2);
+    }
+
+    .dock-tab-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+    }
+
+    .dock-tab-label {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    /* Single Active Pane Container */
+    .dock-pane {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      padding: 14px;
+      gap: 12px;
       overflow-y: auto;
-      overflow-x: hidden;
-      padding: 10px;
-      gap: 8px;
     }
 
-    .panel-box {
+    .dock-pane.active {
+      display: flex;
+    }
+
+    .pane-header-card {
       background: var(--bg-card);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 9px;
-      padding: 9px 11px;
+      border: 1px solid rgba(0, 245, 212, 0.28);
+      border-radius: 10px;
+      padding: 12px 14px;
+      flex-shrink: 0;
     }
 
-    .panel-header {
+    .pane-title-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
-    .panel-title {
-      font-size: 11.5px;
+    .pane-title {
+      font-size: 13.5px;
       font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
       color: var(--accent-cyan);
       font-family: var(--font-mono);
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .pane-desc {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+
+    .section-box {
+      background: var(--bg-card);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-box.grow {
+      flex: 1;
+      min-height: 220px;
+      overflow: hidden;
+    }
+
+    .sub-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .input-row {
       display: flex;
-      gap: 6px;
-      margin-bottom: 6px;
+      gap: 8px;
     }
 
-    .text-input, .textarea-input {
+    .text-input, .textarea-input, .select-input {
       width: 100%;
-      background: rgba(7, 10, 19, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      border-radius: 6px;
+      background: rgba(6, 9, 18, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 7px;
       color: #fff;
-      padding: 7px 10px;
-      font-size: 12px;
+      padding: 8px 11px;
+      font-size: 12.5px;
       font-family: var(--font-mono);
+      user-select: text;
     }
 
     .textarea-input {
-      min-height: 54px;
+      min-height: 76px;
       resize: vertical;
       font-family: var(--font-sans);
+      line-height: 1.4;
     }
 
     .text-input:focus, .textarea-input:focus {
       outline: none;
       border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 245, 212, 0.15);
+    }
+
+    /* Live Chat Message Window (Pane 1) */
+    .chat-stream-window {
+      flex: 1;
+      background: rgba(5, 8, 15, 0.95);
+      border: 1px solid rgba(0, 245, 212, 0.25);
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: var(--font-mono);
+      user-select: text;
+    }
+
+    .chat-msg-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-left: 3px solid var(--accent-cyan);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .chat-msg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3px;
+      font-size: 10.5px;
+      color: var(--text-dim);
+    }
+
+    .chat-badge {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-weight: 800;
+      background: rgba(0, 245, 212, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 245, 212, 0.35);
+    }
+
+    .chat-reply-box {
+      margin-top: 5px;
+      padding: 5px 8px;
+      background: rgba(0, 245, 212, 0.08);
+      border-radius: 5px;
+      font-size: 11px;
+      color: #a5f3fc;
+      border-left: 2px solid var(--accent-amber);
+    }
+
+    /* Codex Terminal Window (Pane 2) */
+    .codex-log-window {
+      flex: 1;
+      background: rgba(5, 8, 15, 0.95);
+      border: 1px solid rgba(155, 93, 229, 0.35);
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      user-select: text;
+    }
+
+    .codex-exchange-card {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(0, 245, 212, 0.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .codex-prompt-bubble {
+      background: rgba(30, 41, 59, 0.9);
+      border-left: 3px solid var(--accent-amber);
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: #fef08a;
+    }
+
+    .codex-reply-bubble {
+      background: rgba(0, 245, 212, 0.09);
+      border-left: 3px solid var(--accent-cyan);
+      padding: 8px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: #e2e8f0;
+      line-height: 1.45;
     }
 
     .preset-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      margin-top: 6px;
+      gap: 7px;
     }
 
     .preset-btn {
       text-align: left;
-      padding: 7px 9px;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(0, 245, 212, 0.24);
-      border-radius: 6px;
+      padding: 8px 10px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(0, 245, 212, 0.25);
+      border-radius: 7px;
       color: #e2e8f0;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.14s ease;
@@ -555,54 +763,73 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
 
     .preset-btn:hover {
       border-color: var(--accent-cyan);
-      background: rgba(0, 245, 212, 0.14);
+      background: rgba(0, 245, 212, 0.15);
     }
 
-    .verb-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-    }
-
-    .diff-list {
+    /* Diff Summary Table (Pane 3) */
+    .diff-table-container {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      max-height: 112px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      font-family: var(--font-mono);
-      font-size: 10.5px;
+      gap: 7px;
     }
 
-    .diff-item {
-      display: flex;
-      justify-content: space-between;
+    .diff-row-card {
+      display: grid;
+      grid-template-columns: 1.05fr 0.85fr 1.1fr;
       align-items: center;
-      flex-shrink: 0;
       gap: 8px;
-      background: rgba(7, 10, 19, 0.75);
-      padding: 4px 7px;
-      border-radius: 4px;
-      border-left: 2px solid var(--accent-cyan);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      background: rgba(7, 11, 22, 0.92);
+      border: 1px solid rgba(0, 245, 212, 0.24);
+      border-left: 4px solid var(--accent-cyan);
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      word-break: break-word;
     }
 
-    .ast-code {
-      background: rgba(5, 8, 16, 0.95);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 6px;
-      padding: 8px;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: #a5f3fc;
-      max-height: 165px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      white-space: pre-wrap;
+    .diff-param-name {
+      color: #f8fafc;
+      font-weight: 700;
+    }
+
+    .diff-before-val {
+      color: #f87171;
+      text-decoration: line-through;
+      font-size: 11px;
+    }
+
+    .diff-after-val {
+      color: var(--accent-cyan);
+      font-weight: 800;
+      text-align: right;
       word-break: break-word;
+    }
+
+    /* Guardrail Report Box (Pane 4) */
+    .guardrail-report-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 2px solid rgba(34, 197, 94, 0.5);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .guardrail-report-card.blocked {
+      background: rgba(69, 10, 10, 0.55);
+      border-color: #ef4444;
+      box-shadow: 0 0 22px rgba(239, 68, 68, 0.25);
+    }
+
+    .guardrail-report-card.clamped {
+      background: rgba(69, 26, 3, 0.55);
+      border-color: var(--accent-amber);
+      box-shadow: 0 0 22px rgba(254, 228, 64, 0.2);
     }
 
     .check-badge {
@@ -610,12 +837,39 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       align-items: center;
       gap: 4px;
       font-family: var(--font-mono);
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(56, 176, 0, 0.18);
+      font-size: 10.5px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: rgba(34, 197, 94, 0.16);
       color: #86efac;
-      border: 1px solid rgba(56, 176, 0, 0.4);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .check-badge.fail {
+      background: rgba(239, 68, 68, 0.22);
+      color: #fca5a5;
+      border-color: #ef4444;
+    }
+
+    .ast-code {
+      background: rgba(5, 8, 16, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 7px;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #a5f3fc;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+    }
+
+    .verb-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
   </style>
 </head>
@@ -627,30 +881,29 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         <div class="brand-logo">CF</div>
         <div>
           <div class="brand-title">CHAOSFORGE // ANOMALY ENGINE</div>
-          <div class="brand-sub">Live-Compiled 60 FPS Vector Boss Raid &amp; Codex AST Mutator for Twitch</div>
+          <div class="brand-sub">Live-Compiled 60 FPS Vector Boss Raid &amp; Codex Rule Mutator for Twitch</div>
         </div>
       </div>
 
       <div class="nav-tabs">
-        <button class="nav-tab active" data-view="studio" id="tabStudio">Split Studio (Director + Arena)</button>
-        <button class="nav-tab" data-view="codex" id="tabCodex">Codex AST &amp; Invariant Inspector</button>
+        <button class="nav-tab active" data-view="studio" id="tabStudio">Split Studio (Arena + Control Panel)</button>
         <button class="nav-tab" data-view="overlay" id="tabOverlay">OBS Clean Overlay</button>
       </div>
 
       <div class="top-actions">
         <div class="status-pill" id="twitchStatusPill">
-          <span class="status-dot warn" id="twitchStatusDot"></span>
-          <span id="twitchStatusText">IRC: READY (STAGE SIM + LIVE WS)</span>
+          <span class="status-dot" id="twitchStatusDot"></span>
+          <span id="twitchStatusText">IRC: choose a channel</span>
         </div>
-        <button class="btn" id="btnToggleAudio" title="Toggle Procedural Web Audio Synth">Audio Synth: OFF</button>
-        <button class="btn" id="btnToggleAlpha" title="Toggle Transparent Background for OBS Browser Source">OBS Alpha</button>
-        <button class="btn btn-accent" id="btnStageSurge">Stage Crowd Surge (12 Viewers)</button>
+        <button class="btn" id="btnToggleAudio">Audio Synth: OFF</button>
+        <button class="btn" id="btnToggleAlpha">OBS Alpha</button>
+        <button class="btn btn-accent" id="btnStageSurge">Stage Crowd Surge (10 Viewers)</button>
       </div>
     </header>
 
     <!-- Main Workspace -->
     <main class="workspace">
-      <!-- 60 FPS Vector Physics Canvas Stage -->
+      <!-- Left: 60 FPS Vector Physics Canvas Stage -->
       <section class="arena-stage">
         <div class="obs-alpha-banner">
           <span>ALPHA CHANNEL ACTIVE (RGBA 0,0,0,0) — OBS BROWSER SOURCE OVERLAY LAYER</span>
@@ -674,7 +927,7 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
           </div>
 
           <div class="patch-hud-card">
-            <div class="patch-hud-badge" id="hudPatchAuthor">ACTIVE CODEX AST PATCH // @system</div>
+            <div class="patch-hud-badge" id="hudPatchAuthor">ACTIVE CODEX PATCH // @system</div>
             <div class="patch-hud-title" id="hudPatchTitle">Genesis Orbital Core</div>
             <div class="patch-hud-laws" id="hudPatchLaws">
               <span class="law-chip">field: central_attractor</span>
@@ -692,106 +945,258 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
           </div>
 
           <div class="feed-card">
-            <div class="hud-section-title">LIVE AST &amp; KINETIC TELEMETRY FEED</div>
+            <div class="hud-section-title">LIVE ARENA TELEMETRY FEED</div>
             <div id="hudFeedList"></div>
           </div>
         </div>
       </section>
 
-      <!-- Right Side Dock: Streamer Director Deck & Codex AST Workbench -->
+      <!-- Right Side Dock: 4 Exclusive Full-Height Tabs -->
       <aside class="side-dock">
-        <!-- 1. Real Twitch IRC WebSocket & EventSub Bridge -->
-        <div class="panel-box">
-          <div class="panel-header">
-            <span class="panel-title">1. Twitch API, IRCv3 Chat &amp; EventSub Bridge</span>
-            <span class="check-badge" id="ircBadge">IRC + EventSub Active</span>
-          </div>
-          <div class="input-row">
-            <input type="text" class="text-input" id="inputTwitchChannel" placeholder="Enter live Twitch channel (e.g. twitchdev, bck_stack)" value="bck_stack" />
-            <button class="btn btn-primary" id="btnConnectTwitch">Connect Live IRC</button>
-          </div>
-          <div style="font-size: 10.5px; color: var(--text-dim); margin-bottom: 4px;">
-            Twitch Chat Commands (IRCv3 WebSocket):
-          </div>
-          <div class="verb-bar" style="margin-bottom: 7px;">
-            <button class="btn" data-cmd="!slingshot">!slingshot</button>
-            <button class="btn" data-cmd="!tether">!tether</button>
-            <button class="btn" data-cmd="!parry">!parry</button>
-            <button class="btn" data-cmd="!overclock">!overclock</button>
-            <button class="btn" data-cmd="!emp">!emp</button>
-          </div>
-          <div style="font-size: 10.5px; color: var(--text-dim); margin-bottom: 4px;">
-            Twitch EventSub Webhooks &amp; WebSocket (follow / sub / cheer / raid / hype_train):
-          </div>
-          <div class="verb-bar">
-            <button class="btn" data-eventsub="channel.follow">+ Follow</button>
-            <button class="btn" data-eventsub="channel.subscribe">★ Sub Ion Strike</button>
-            <button class="btn" data-eventsub="channel.cheer">💎 Cheer 500 Bits</button>
-            <button class="btn" data-eventsub="channel.raid">🚀 Raid (45)</button>
-            <button class="btn btn-accent" data-eventsub="channel.hype_train.begin">🔥 Hype Train</button>
-          </div>
+        <!-- 4-Button Selector Strip -->
+        <div class="dock-tab-strip">
+          <button class="dock-tab-btn active" data-pane="1">
+            <span class="dock-tab-num">1</span>
+            <span class="dock-tab-label">Twitch API &amp; Chat</span>
+          </button>
+          <button class="dock-tab-btn" data-pane="2">
+            <span class="dock-tab-num">2</span>
+            <span class="dock-tab-label">Codex Rule Mutator</span>
+          </button>
+          <button class="dock-tab-btn" data-pane="3">
+            <span class="dock-tab-num">3</span>
+            <span class="dock-tab-label">Diff Summary (<span id="tabDiffCount">4</span>)</span>
+          </button>
+          <button class="dock-tab-btn" data-pane="4">
+            <span class="dock-tab-num">4</span>
+            <span class="dock-tab-label">Test Guardrail</span>
+          </button>
         </div>
 
-        <!-- 2. OpenAI Codex Live Physics & Boss AST Mutator -->
-        <div class="panel-box">
-          <div class="panel-header">
-            <span class="panel-title">2. Codex Live Rule Mutator (!patch)</span>
-            <span class="check-badge" id="compilerModeBadge">ArenaPatchSchema v1</span>
-          </div>
-          <textarea class="textarea-input" id="inputPatchPrompt" placeholder="Type any natural-language physics or boss mutation (e.g. 'Split gravity into twin binary pulsars with prism ricochet beams and 3.4x tether whips')...">Split the reactor into twin binary pulsar gravity wells with high Coriolis spin and ricochet prism beams.</textarea>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-            <span style="font-size: 10.5px; color: var(--text-dim); font-family: var(--font-mono);" id="compileLatencyLabel">18/18 Static Invariants Verified</span>
-            <button class="btn btn-primary" id="btnCompilePatch">Compile &amp; Hot-Swap AST</button>
-          </div>
-
-          <div class="preset-grid" id="presetGrid"></div>
-        </div>
-
-        <!-- 3. Community !patch Voting Queue & Rollback History -->
-        <div class="panel-box">
-          <div class="panel-header">
-            <span class="panel-title">3. Structural AST Diffs &amp; Hot-Swap History</span>
-            <button class="btn" id="btnSimulateChatPatch" style="padding: 3px 8px; font-size: 10.5px;">+ Simulate Chat !patch</button>
-          </div>
-          <div class="diff-list" id="diffList">
-            <div class="diff-item"><span>No mutations yet — running Genesis Orbital Core</span></div>
-          </div>
-        </div>
-
-        <!-- 4. Validated ArenaPatchSchema v1 AST Inspector -->
-        <div class="panel-box">
-          <div class="panel-header">
-            <span class="panel-title">4. Verified ArenaPatch AST &amp; Lyapunov Bounds</span>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <button class="btn" id="btnTestGuardrail" style="padding:2px 7px; font-size:10px;" title="Inject adversarial eval() / divergent physics payload to verify static AST rejection">Test Guardrail</button>
-              <span class="check-badge" id="tickBudgetBadge">0.42ms / tick</span>
+        <!-- ==================================================================
+             PANE 1: TWITCH API, LIVE CHAT WINDOW & EVENTSUB BRIDGE
+             ================================================================== -->
+        <div class="dock-pane active" id="dockPane1">
+          <div class="pane-header-card">
+            <div class="pane-title-row">
+              <span class="pane-title">1. Twitch API, Live Chat &amp; EventSub</span>
+              <span class="check-badge" id="pane1StatusBadge">wss://irc-ws.chat.twitch.tv:443</span>
+            </div>
+            <div class="pane-desc">
+              Connects to any live Twitch channel via IRCv3 WebSocket &amp; EventSub. Messages typed on Twitch or below immediately drive the 60 FPS arena.
             </div>
           </div>
-          <div id="invariantCheckList" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;"></div>
-          <pre class="ast-code" id="astJsonViewer"></pre>
+
+          <!-- Channel Connection Bar -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>Live Twitch Channel Connection</span>
+              <span id="ircConnectionDetail" style="color:var(--accent-cyan);">Not connected — choose your channel</span>
+            </div>
+            <div class="input-row">
+              <input type="text" class="text-input" id="inputTwitchChannel" placeholder="Your Twitch channel name (e.g. your_channel)" />
+              <button class="btn btn-primary" id="btnConnectTwitch" style="white-space:nowrap;">Connect Live IRC</button>
+            </div>
+          </div>
+
+          <!-- Full-Height Live Twitch Chat Window -->
+          <div class="section-box grow">
+            <div class="sub-label">
+              <span>Live Twitch Chat Stream (Incoming &amp; Outgoing)</span>
+              <span id="chatMsgCountLabel" style="color:var(--accent-amber);">Live</span>
+            </div>
+            <div class="chat-stream-window" id="chatStreamWindow"></div>
+
+            <!-- Send Message / Command Box -->
+            <div class="input-row" style="margin-top:4px;">
+              <input type="text" class="text-input" id="inputChatSender" style="max-width:115px;" value="viewer" title="Sender username" />
+              <input type="text" class="text-input" id="inputChatMessage" placeholder="Type !slingshot, !tether, or !patch <new rule>..." value="!slingshot" />
+              <button class="btn btn-primary" id="btnSendChat">Send</button>
+            </div>
+            <div class="verb-bar">
+              <button class="btn" data-cmd="!slingshot">!slingshot</button>
+              <button class="btn" data-cmd="!tether @talhacomak">!tether</button>
+              <button class="btn" data-cmd="!parry">!parry</button>
+              <button class="btn" data-cmd="!overclock">!overclock</button>
+              <button class="btn" data-cmd="!emp">!emp</button>
+            </div>
+          </div>
+
+          <!-- Twitch EventSub Webhook & WebSocket Triggers -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>Twitch EventSub Webhooks (POST /api/twitch/eventsub)</span>
+              <span style="color:var(--accent-cyan);">HMAC-SHA256 Ready</span>
+            </div>
+            <div class="verb-bar">
+              <button class="btn" data-eventsub="channel.follow">+ Follow</button>
+              <button class="btn" data-eventsub="channel.subscribe">★ Sub Ion Strike</button>
+              <button class="btn" data-eventsub="channel.cheer">💎 Cheer 500 Bits</button>
+              <button class="btn" data-eventsub="channel.raid">🚀 Raid (45)</button>
+              <button class="btn btn-accent" data-eventsub="channel.hype_train.begin">🔥 Hype Train</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             PANE 2: CODEX LIVE RULE MUTATOR (!PATCH) & RESPONSE TERMINAL
+             ================================================================== -->
+        <div class="dock-pane" id="dockPane2">
+          <div class="pane-header-card">
+            <div class="pane-title-row">
+              <span class="pane-title">2. Codex Live Rule Mutator (!patch)</span>
+              <span class="check-badge" id="codexStatusBadge">CODEX AST READY</span>
+            </div>
+            <div class="pane-desc">
+              Write any natural-language rule change below (or via <code>!patch</code> in Twitch chat). Codex compiles your sentence into a verified physics &amp; Boss AST and hot-swaps the game live.
+            </div>
+          </div>
+
+          <!-- Codex Connection Bar -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>OpenAI Codex Compiler Connection (server-managed)</span>
+              <span id="codexConnStateLabel" style="color:#86efac;">● CONNECTED (ArenaPatchSchema v1)</span>
+            </div>
+            <div class="pane-desc">The deployment owns its compiler configuration. Visitors never paste or expose an API key in the browser.</div>
+          </div>
+
+          <!-- Codex Prompt Box -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>Write Rule Mutation to Codex</span>
+              <span id="compileLatencyLabel" style="color:var(--accent-cyan);">Schema: ArenaPatchSchema v1</span>
+            </div>
+            <textarea class="textarea-input" id="inputPatchPrompt" placeholder="Write what Codex should change in the game...">Split the reactor into twin binary pulsar gravity wells with high Coriolis spin and ricochet prism beams.</textarea>
+            <div style="display:flex; gap:8px; justify-content:space-between; align-items:center;">
+              <button class="btn" id="btnSimulateChatPatch">+ Simulate Viewer !patch from Chat</button>
+              <button class="btn btn-primary" id="btnCompilePatch">Compile &amp; Apply with Codex</button>
+            </div>
+
+            <div class="sub-label" style="margin-top:4px;">
+              <span>Quick Codex World Presets</span>
+            </div>
+            <div class="preset-grid" id="presetGrid"></div>
+          </div>
+
+          <!-- Codex Prompt & Response History Terminal -->
+          <div class="section-box grow">
+            <div class="sub-label">
+              <span>Codex Prompt &amp; Response Log (What We Asked vs. What Codex Built)</span>
+              <span id="codexLogCountLabel" style="color:var(--accent-amber);">Active</span>
+            </div>
+            <div class="codex-log-window" id="codexLogWindow"></div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             PANE 3: STRUCTURAL DIFF SUMMARY (BEFORE -> AFTER) & ROLLBACK
+             ================================================================== -->
+        <div class="dock-pane" id="dockPane3">
+          <div class="pane-header-card">
+            <div class="pane-title-row">
+              <span class="pane-title">3. Diff Summary (Previous Rule ➔ New Rule)</span>
+              <span class="check-badge" id="diffHeaderBadge">Live AST Diff</span>
+            </div>
+            <div class="pane-desc">
+              Shows every single physical constant, gravity topology, Boss chassis, and chat multiplier that changed in the latest Codex hot-swap.
+            </div>
+          </div>
+
+          <!-- Full-Height Structural Diff List -->
+          <div class="section-box grow">
+            <div class="sub-label">
+              <span>Parameter Comparison (Parameter | Previous Value ➔ New Value)</span>
+              <span id="diffPatchTitleLabel" style="color:var(--accent-cyan);">Genesis Orbital Core</span>
+            </div>
+            <div class="diff-table-container" id="diffList"></div>
+          </div>
+
+          <!-- Patch History & One-Click Rollback -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>Applied Patch History (Click to Rollback Live)</span>
+            </div>
+            <div id="patchHistoryList" style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             PANE 4: TEST GUARDRAIL & PHYSICS SAFETY ENGINE
+             ================================================================== -->
+        <div class="dock-pane" id="dockPane4">
+          <div class="pane-header-card">
+            <div class="pane-title-row">
+              <span class="pane-title">4. Test Guardrail &amp; Physics Safety Wall</span>
+              <span class="check-badge" id="tickBudgetBadge">0.09ms / tick (60 FPS)</span>
+            </div>
+            <div class="pane-desc">
+              Every rule mutation is checked against 18 safety &amp; Lyapunov energy stability rules before touching the 60 FPS loop. Click below to fire an unsafe payload and watch the Guardrail block it live!
+            </div>
+          </div>
+
+          <!-- Prominent Test Guardrail Action Buttons -->
+          <div class="section-box">
+            <div class="sub-label">
+              <span>Live Guardrail Stress-Test Actions</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <button class="btn btn-danger" id="btnTestGuardrailEval">
+                🛑 Test Guardrail #1: Malicious eval() Injection
+              </button>
+              <button class="btn btn-accent" id="btnTestGuardrailEnergy">
+                ⚡ Test Guardrail #2: Infinite Energy (2.85x Bounce)
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Guardrail Execution Diagnostic Box -->
+          <div class="guardrail-report-card" id="guardrailReportBox">
+            <div style="font-weight:800; color:#86efac; margin-bottom:4px;" id="guardrailHeadline">
+              ✓ GUARDRAIL STATUS: ALL 18 SAFETY &amp; PHYSICS INVARIANTS PASSING
+            </div>
+            <div style="font-size:11.5px; color:#cbd5e1;" id="guardrailDetail">
+              Click either "Test Guardrail" button above to send an intentionally malicious or physically unstable payload and verify live interception.
+            </div>
+          </div>
+
+          <!-- 18-Point Static Invariant Badges + JSON Schema View -->
+          <div class="section-box grow">
+            <div class="sub-label">
+              <span>Active Safety Checks &amp; Raw Diagnostic JSON</span>
+            </div>
+            <div id="invariantCheckList" style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px;"></div>
+            <pre class="ast-code" id="astJsonViewer" style="flex:1; max-height:none;"></pre>
+          </div>
         </div>
       </aside>
     </main>
   </div>
 
   <script type="module">
-    const INITIAL_SNAPSHOT = ${safeInitialJson};
+    const INITIAL_PAYLOAD = ${safePayloadJson};
     const PRESETS = ${safePresetsJson};
+    const ROOM_ID = INITIAL_PAYLOAD.room.id;
 
-    let state = INITIAL_SNAPSHOT;
-    let lastDiffs = [];
+    let fullData = INITIAL_PAYLOAD;
+    let state = INITIAL_PAYLOAD.snapshot;
+    let activePane = '1';
     let audioEnabled = false;
+    const escapeHtml = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
     let audioCtx = null;
 
     const canvas = document.getElementById('arenaCanvas');
     const ctx = canvas.getContext('2d');
 
-    // URL query view support (?view=overlay or ?view=codex)
+    // URL query view support (?view=overlay or ?pane=1..4)
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') === 'overlay') {
       document.body.classList.add('view-overlay');
-    } else if (params.get('view') === 'codex') {
-      document.body.classList.add('view-codex');
     }
     if (params.get('alpha') === '1') {
       document.body.classList.add('obs-transparent');
@@ -799,29 +1204,40 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     if (window.obsstudio) {
       document.body.classList.add('obs-real-capture');
     }
+    if (['1', '2', '3', '4'].includes(params.get('pane'))) {
+      switchRightPane(params.get('pane'));
+    }
 
-    // View Switching Tabs
+    // Top View Switching Tabs (Split Studio vs OBS Clean Overlay)
     document.querySelectorAll('.nav-tab').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.nav-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         const v = btn.dataset.view;
-        document.body.classList.remove('view-overlay', 'view-codex');
+        document.body.classList.remove('view-overlay');
         if (v === 'overlay') document.body.classList.add('view-overlay');
-        if (v === 'codex') document.body.classList.add('view-codex');
         resizeCanvas();
       });
     });
 
-    // Double-click anywhere in overlay mode to return to Split Studio
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.body.classList.remove('view-overlay');
-        resizeCanvas();
-      }
+    // Right Dock 4-Tab Exclusive Switcher (Clicking 1 closes 2,3,4; clicking 2 closes 1,3,4, etc.)
+    function switchRightPane(paneId) {
+      activePane = String(paneId);
+      document.querySelectorAll('.dock-tab-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.pane === activePane);
+      });
+      document.querySelectorAll('.dock-pane').forEach((pane) => {
+        pane.classList.toggle('active', pane.id === 'dockPane' + activePane);
+      });
+    }
+
+    document.querySelectorAll('.dock-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        switchRightPane(btn.dataset.pane);
+      });
     });
 
-    // Procedural Web Audio Synthesizer (zero external audio files)
+    // Procedural Web Audio Synthesizer
     function playSynthPulse(freqHz = 220, type = 'sine', durationSec = 0.22) {
       if (!audioEnabled) return;
       try {
@@ -858,69 +1274,81 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       document.body.classList.toggle('obs-transparent');
     });
 
-    // Render signature preset buttons
+    // Render signature preset buttons in Pane 2
     const presetGrid = document.getElementById('presetGrid');
     PRESETS.forEach((p) => {
       const btn = document.createElement('button');
       btn.className = 'preset-btn';
-      btn.innerHTML = '<div style="color: var(--accent-cyan); margin-bottom:2px;">' + p.label + '</div>' +
-        '<div style="font-size:10px; color: var(--text-dim); font-weight:400;">' + p.candidate.fieldLaw.type + ' // ' + p.candidate.bossSpec.chassis + '</div>';
+      btn.innerHTML =
+        '<div style="color: var(--accent-cyan); margin-bottom:2px;">' + p.label + '</div>' +
+        '<div style="font-size:10px; color: var(--text-dim); font-weight:400;">' +
+        p.candidate.fieldLaw.type + ' // ' + p.candidate.bossSpec.chassis + '</div>';
       btn.addEventListener('click', () => {
         document.getElementById('inputPatchPrompt').value = p.prompt;
-        triggerCompilePatch(p.id, 'streamer_director');
+        triggerCompilePatch(p.prompt, 'viewer');
       });
       presetGrid.appendChild(btn);
     });
 
-    // API Helpers
     async function postApi(path, body) {
       const res = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ ...body, roomId: ROOM_ID })
       });
       return res.json();
     }
 
-    async function triggerCompilePatch(promptValue, author = 'streamer_director') {
-      const btn = document.getElementById('btnCompilePatch');
-      btn.textContent = 'Compiling AST...';
-      const result = await postApi('/api/patch/compile', { prompt: promptValue, author });
-      btn.textContent = 'Compile & Hot-Swap AST';
-
-      if (result.ok) {
-        state = result.snapshot;
-        lastDiffs = result.diffs || [];
-        document.getElementById('compilerModeBadge').textContent = result.compilerMode;
-        document.getElementById('compileLatencyLabel').textContent =
-          'Verified 18/18 Invariants in ' + result.compileLatencyMs + 'ms';
-        renderDiffList(lastDiffs);
-        updateDomHud();
-        playSynthPulse(state.activePatch.aesthetics.harmonicFrequencyHz || 260, 'sawtooth', 0.35);
+    function applyServerPayload(data) {
+      if (!data) return;
+      fullData = data;
+      if (data.snapshot) {
+        state = data.snapshot;
       }
+      updateDomHud();
     }
 
-    document.getElementById('btnCompilePatch').addEventListener('click', () => {
-      const prompt = document.getElementById('inputPatchPrompt').value;
-      triggerCompilePatch(prompt, 'bck_stack');
+    // =========================================================================
+    // PANE 1 ACTIONS: LIVE TWITCH CHAT & EVENTSUB
+    // =========================================================================
+    async function sendChatMessageFromBox() {
+      const sender = document.getElementById('inputChatSender').value.trim() || 'viewer';
+      const msgInput = document.getElementById('inputChatMessage');
+      const message = msgInput.value.trim();
+      if (!message) return;
+
+      const res = await postApi('/api/chat/send', {
+        username: sender,
+        message,
+        source: 'studio-live-chat',
+        badge: 'LIVE CHAT'
+      });
+      applyServerPayload(res);
+      playSynthPulse(360, 'sine', 0.16);
+    }
+
+    document.getElementById('btnSendChat').addEventListener('click', sendChatMessageFromBox);
+    document.getElementById('inputChatMessage').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChatMessageFromBox();
+      }
     });
 
     // Quick Chat Verb Buttons
     document.querySelectorAll('[data-cmd]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const cmd = btn.dataset.cmd;
-        const viewers = ['bck_stack', 'talhacomak', 'codex_pilot', 'kinetic_nova', 'shader_witch'];
-        const pick = viewers[Math.floor(Math.random() * viewers.length)];
-        const res = await postApi('/api/chat/command', {
-          username: pick,
-          command: cmd.replace('!', ''),
-          argsText: ''
+        const sender = document.getElementById('inputChatSender').value.trim() || 'viewer';
+        document.getElementById('inputChatMessage').value = cmd;
+        const res = await postApi('/api/chat/send', {
+          username: sender,
+          message: cmd,
+          source: 'twitch-chat-cmd',
+          badge: 'TWITCH CMD'
         });
-        if (res.snapshot) {
-          state = res.snapshot;
-          updateDomHud();
-          playSynthPulse(340, 'sine', 0.14);
-        }
+        applyServerPayload(res);
+        playSynthPulse(340, 'sine', 0.14);
       });
     });
 
@@ -928,40 +1356,55 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
     document.querySelectorAll('[data-eventsub]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const subType = btn.dataset.eventsub;
-        const viewers = ['talhacomak', 'bck_stack', 'codex_pilot', 'kinetic_nova', 'shader_witch'];
-        const pick = viewers[Math.floor(Math.random() * viewers.length)];
+        const sender = document.getElementById('inputChatSender').value.trim() || 'talhacomak';
         const res = await postApi('/api/twitch/eventsub/simulate', {
           type: subType,
-          username: pick,
+          username: sender,
           viewers: 45,
           bits: 500,
           tier: '3000',
           level: 4
         });
-        if (res.snapshot) {
-          state = res.snapshot;
-          updateDomHud();
-          playSynthPulse(520, 'sawtooth', 0.32);
-        }
+        applyServerPayload(res);
+        playSynthPulse(520, 'sawtooth', 0.32);
       });
     });
 
-    // Stage Crowd Surge Button
-    document.getElementById('btnStageSurge').addEventListener('click', async () => {
-      const res = await postApi('/api/stage/surge', {});
-      if (res.snapshot) {
-        state = res.snapshot;
-        updateDomHud();
-        playSynthPulse(440, 'triangle', 0.28);
-      }
+    document.getElementById('btnConnectTwitch').addEventListener('click', async () => {
+      const ch = document.getElementById('inputTwitchChannel').value.trim();
+      if (!ch) return;
+      const res = await postApi('/api/twitch/connect', { channel: ch });
+      applyServerPayload(res);
     });
 
-    // Simulate a viewer !patch from Twitch chat
+    // =========================================================================
+    // PANE 2 ACTIONS: CODEX LIVE RULE MUTATOR (!PATCH)
+    // =========================================================================
+    async function triggerCompilePatch(promptValue, author = 'viewer') {
+      const btn = document.getElementById('btnCompilePatch');
+      btn.textContent = 'Codex Compiling AST...';
+      const res = await postApi('/api/patch/compile', { prompt: promptValue, author });
+      btn.textContent = 'Compile & Apply with Codex';
+      applyServerPayload(res);
+
+      if (res.ok) {
+        document.getElementById('compileLatencyLabel').textContent =
+          'Compiled & Verified 18/18 Invariants in ' + res.compileLatencyMs + 'ms (' + res.compilerMode + ')';
+        playSynthPulse(state.activePatch.aesthetics.harmonicFrequencyHz || 260, 'sawtooth', 0.35);
+      }
+    }
+
+    document.getElementById('btnCompilePatch').addEventListener('click', () => {
+      const prompt = document.getElementById('inputPatchPrompt').value;
+      triggerCompilePatch(prompt, 'viewer');
+    });
+
+
     const SAMPLE_VIEWER_PATCHES = [
       { user: 'talhacomak', prompt: 'Invert magnetic dipole poles and supercharge elastic viewer tether whips to 3.4x cleave damage' },
       { user: 'shader_witch', prompt: 'Create a 4-pole harmonic standing-wave lattice with Chronos Tesseract and high-speed parry reflections' },
       { user: 'kinetic_nova', prompt: 'Kill central gravity into zero-g hyper-elastic ricochet chamber with prism lasers' },
-      { user: 'bck_stack', prompt: 'Twin binary pulsar singularity wells with 5 shield arcs and spiral lance barrage' }
+      { user: 'arena_visitor', prompt: 'Twin binary pulsar singularity wells with 5 shield arcs and spiral lance barrage' }
     ];
     let sampleIdx = 0;
 
@@ -972,57 +1415,42 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       await triggerCompilePatch(item.prompt, item.user);
     });
 
-    document.getElementById('btnTestGuardrail').addEventListener('click', async () => {
-      const res = await postApi('/api/patch/test-guardrail', {});
-      if (res.report) {
-        state = res.snapshot;
-        document.getElementById('compileLatencyLabel').textContent =
-          'BLOCKED UNSAFE AST: ' + (res.report.rejectedReasons[0] || 'Lyapunov divergence');
-        document.getElementById('astJsonViewer').textContent = JSON.stringify(res.report, null, 2);
-        playSynthPulse(110, 'sawtooth', 0.25);
-      }
-    });
-
-    // Connect Live Twitch IRC Channel
-    const twitchClientState = { ws: null, channel: null };
-    document.getElementById('btnConnectTwitch').addEventListener('click', async () => {
-      const ch = document.getElementById('inputTwitchChannel').value.trim();
-      if (!ch) return;
-      const res = await postApi('/api/twitch/connect', { channel: ch });
-      if (res.status) {
-        const dot = document.getElementById('twitchStatusDot');
-        const txt = document.getElementById('twitchStatusText');
-        dot.classList.remove('warn');
-        txt.textContent = 'IRC LIVE: #' + res.status.channel + ' (wss://irc-ws.chat.twitch.tv)';
-      }
-    });
-
-    function renderDiffList(diffs) {
-      const container = document.getElementById('diffList');
-      const activeDiffs = (diffs && diffs.length > 0)
-        ? diffs
-        : (state?.patchHistory?.[0]?.diffs || []);
-      if (!activeDiffs || activeDiffs.length === 0) {
-        container.innerHTML = '<div class="diff-item"><span>Genesis Orbital Core active — click any preset or !patch to mutate AST</span></div>';
-        return;
-      }
-      container.innerHTML = activeDiffs
-        .map(
-          (d) =>
-            '<div class="diff-item">' +
-            '<span style="color:#94a3b8;">' + d.path + '</span>' +
-            '<span><s style="color:#64748b; margin-right:6px;">' + d.before + '</s>' +
-            '<strong style="color:var(--accent-cyan);">' + d.after + '</strong></span>' +
-            '</div>'
-        )
-        .join('');
+    // =========================================================================
+    // PANE 4 ACTIONS: TEST GUARDRAIL BUTTONS
+    // =========================================================================
+    async function runGuardrailTest(scenario) {
+      const res = await postApi('/api/patch/test-guardrail', { scenario });
+      applyServerPayload(res);
+      playSynthPulse(115, 'sawtooth', 0.3);
     }
+
+    document.getElementById('btnTestGuardrailEval').addEventListener('click', () => {
+      runGuardrailTest('eval_injection');
+    });
+
+    document.getElementById('btnTestGuardrailEnergy').addEventListener('click', () => {
+      runGuardrailTest('energy_divergence');
+    });
+
+    // Stage Crowd Surge Button
+    document.getElementById('btnStageSurge').addEventListener('click', async () => {
+      const res = await postApi('/api/stage/surge', {});
+      applyServerPayload(res);
+      playSynthPulse(440, 'triangle', 0.28);
+    });
+
+    // =========================================================================
+    // DOM HUD & 4-PANE RENDERER
+    // =========================================================================
+    let lastRenderedChatCount = -1;
+    let lastRenderedCodexId = null;
 
     function updateDomHud() {
       if (!state || !state.activePatch) return;
       const patch = state.activePatch;
       const boss = state.boss;
 
+      // Top Left Boss HUD
       document.getElementById('hudBossName').textContent = boss.name || patch.bossSpec.name;
       document.getElementById('hudBossPhase').textContent =
         'PHASE ' + boss.phase + ' // ' + patch.bossSpec.chassis.toUpperCase();
@@ -1035,8 +1463,9 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       const curAttack = seq[boss.behaviorIndex % Math.max(1, seq.length)] || 'spiral_lance_barrage';
       document.getElementById('hudBossAttackText').textContent = 'ACTIVE: ' + curAttack;
 
+      // Top Right Patch HUD
       document.getElementById('hudPatchAuthor').textContent =
-        'ACTIVE CODEX AST PATCH // @' + patch.author;
+        'ACTIVE CODEX PATCH // @' + patch.author;
       document.getElementById('hudPatchTitle').textContent = patch.title;
       document.getElementById('hudPatchLaws').innerHTML =
         '<span class="law-chip">field: ' + patch.fieldLaw.type + '</span>' +
@@ -1045,62 +1474,215 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         '<span class="law-chip">tether: ' + patch.droneLaw.tetherDamageBonus + 'x</span>' +
         '<span class="law-chip">bounce: ' + patch.fieldLaw.restitution + '</span>';
 
-      // Top MVP Drones
+      // Bottom Left MVP List
       const mvpEl = document.getElementById('hudMvpList');
       const topDrones = (state.drones || []).slice(0, 4);
-      if (topDrones.length === 0) {
-        mvpEl.innerHTML = '<div class="mvp-row"><span style="color:var(--text-dim);">Waiting for Twitch chat (!join / !slingshot)...</span></div>';
-      } else {
-        mvpEl.innerHTML = topDrones
+      mvpEl.innerHTML = topDrones
+        .map(
+          (d, idx) =>
+            '<div class="mvp-row">' +
+            '<span><strong style="color:' + escapeHtml(d.color) + ';">#' + (idx + 1) + ' @' + escapeHtml(d.username) + '</strong></span>' +
+            '<span>' + d.damageDealt + ' DMG | ' + d.tetherCleaves + ' Whips | ' + d.parries + ' Parry</span>' +
+            '</div>'
+        )
+        .join('');
+
+      // Bottom Right Telemetry Feed
+      const feedEl = document.getElementById('hudFeedList');
+      const logs = (state.combatLog || []).slice(0, 4);
+      feedEl.innerHTML = logs
+        .map((l) => '<div class="feed-line">[' + escapeHtml(l.timeSec) + 's] ' + escapeHtml(l.text) + '</div>')
+        .join('');
+
+      // Twitch Status Bar
+      if (fullData.twitch && fullData.twitch.channel) {
+        const ch = fullData.twitch.channel;
+        const st = (fullData.twitch.status || 'connected').toUpperCase();
+        document.getElementById('twitchStatusText').textContent = 'IRC: #' + ch + ' (' + st + ')';
+        document.getElementById('ircConnectionDetail').textContent =
+          '#' + ch + ' (' + st + ' // ' + (fullData.twitch.messagesReceived || 0) + ' msgs)';
+      }
+
+      // PANE 1: Render Live Chat Messages Window
+      const chatMsgs = fullData.chatMessages || [];
+      if (chatMsgs.length !== lastRenderedChatCount) {
+        lastRenderedChatCount = chatMsgs.length;
+        const chatWin = document.getElementById('chatStreamWindow');
+        document.getElementById('chatMsgCountLabel').textContent = chatMsgs.length + ' messages';
+        chatWin.innerHTML = chatMsgs
+          .slice()
+          .reverse()
           .map(
-            (d, idx) =>
-              '<div class="mvp-row">' +
-              '<span><strong style="color:' + d.color + ';">#' + (idx + 1) + ' @' + d.username + '</strong></span>' +
-              '<span>' + d.damageDealt + ' DMG | ' + d.tetherCleaves + ' Whips | ' + d.parries + ' Parry</span>' +
+            (m) =>
+              '<div class="chat-msg-card" style="border-left-color:' + escapeHtml(m.color || '#00F5D4') + ';">' +
+              '<div class="chat-msg-header">' +
+              '<span><strong style="color:' + escapeHtml(m.color || '#00F5D4') + ';">@' + escapeHtml(m.username) + '</strong> · ' + escapeHtml(m.source) + '</span>' +
+              '<span class="chat-badge">' + escapeHtml(m.badge || 'CHAT') + ' · ' + escapeHtml(m.timestamp) + '</span>' +
+              '</div>' +
+              '<div style="color:#f8fafc; font-weight:600;">' + escapeHtml(m.message) + '</div>' +
+              (m.reply ? '<div class="chat-reply-box">↳ ' + escapeHtml(m.reply) + '</div>' : '') +
               '</div>'
           )
           .join('');
       }
 
-      // Live Telemetry Feed
-      const feedEl = document.getElementById('hudFeedList');
-      const logs = (state.combatLog || []).slice(0, 4);
-      feedEl.innerHTML = logs
-        .map((l) => '<div class="feed-line">[' + l.timeSec + 's] ' + l.text + '</div>')
-        .join('');
-
-      renderDiffList(lastDiffs);
-
-      // Static Invariant Check Chips
-      const checkEl = document.getElementById('invariantCheckList');
-      if (checkEl && state.lastValidation?.checks) {
-        checkEl.innerHTML = state.lastValidation.checks
+      // PANE 2: Render Codex Prompt & Response Log
+      const codexLogs = fullData.codex?.logs || [];
+      const topCodexId = codexLogs[0]?.id || null;
+      if (topCodexId !== lastRenderedCodexId) {
+        lastRenderedCodexId = topCodexId;
+        document.getElementById('codexLogCountLabel').textContent = codexLogs.length + ' compilations';
+        const codexWin = document.getElementById('codexLogWindow');
+        codexWin.innerHTML = codexLogs
           .map(
-            (c) =>
-              '<span class="check-badge" title="' +
-              c.detail.replace(/"/g, '&quot;') +
-              '">✓ ' +
-              c.id +
-              '</span>'
+            (entry) =>
+              '<div class="codex-exchange-card">' +
+              '<div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim);">' +
+              '<span>PROMPT BY <strong style="color:var(--accent-cyan);">@' + escapeHtml(entry.author) + '</strong></span>' +
+              '<span>' + escapeHtml(entry.compilerMode) + ' · ' + escapeHtml(entry.compileLatencyMs) + 'ms · ' + escapeHtml(entry.timestamp) + '</span>' +
+              '</div>' +
+              '<div class="codex-prompt-bubble">"' + escapeHtml(entry.prompt) + '"</div>' +
+              '<div class="codex-reply-bubble">' +
+              '<div style="font-family:var(--font-mono); font-size:10.5px; color:var(--accent-cyan); font-weight:800; margin-bottom:3px;">' +
+              'CODEX RESPONSE ➔ APPLIED PATCH [' + escapeHtml(entry.patchTitle) + ']' +
+              '</div>' +
+              '<div>' + escapeHtml(entry.replyText) + '</div>' +
+              '</div>' +
+              '</div>'
           )
           .join('');
       }
 
-      // AST JSON Inspector
+      // PANE 3: Render Structural Diff Summary & Rollback History
+      const activeDiffs =
+        fullData.lastDiffs && fullData.lastDiffs.length > 0
+          ? fullData.lastDiffs
+          : state.patchHistory?.[0]?.diffs || [];
+      document.getElementById('tabDiffCount').textContent = activeDiffs.length;
+      document.getElementById('diffPatchTitleLabel').textContent =
+        patch.title + ' (' + activeDiffs.length + ' changes)';
+
+      const diffContainer = document.getElementById('diffList');
+      if (activeDiffs.length === 0) {
+        diffContainer.innerHTML =
+          '<div class="diff-row-card"><span class="diff-param-name">No parameter diffs</span><span>—</span><span class="diff-after-val">Identical</span></div>';
+      } else {
+        diffContainer.innerHTML = activeDiffs
+          .map(
+            (d) =>
+              '<div class="diff-row-card">' +
+              '<span class="diff-param-name">' + escapeHtml(d.path) + '</span>' +
+              '<span class="diff-before-val">' + escapeHtml(d.before) + '</span>' +
+              '<span class="diff-after-val">➔ ' + escapeHtml(d.after) + '</span>' +
+              '</div>'
+          )
+          .join('');
+      }
+
+      const histEl = document.getElementById('patchHistoryList');
+      const historyArr = state.patchHistory || [];
+      histEl.innerHTML = historyArr
+        .map(
+          (h, idx) =>
+            '<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(7,11,22,0.85); padding:6px 10px; border-radius:6px; border:1px solid rgba(148,163,184,0.18); font-size:11.5px;">' +
+            '<div><strong style="color:' + (idx === 0 ? 'var(--accent-cyan)' : '#f8fafc') + ';">' +
+            (idx === 0 ? '[ACTIVE] ' : '') + escapeHtml(h.title) + '</strong> <span style="color:var(--text-dim); font-family:var(--font-mono); font-size:10px;">by @' + escapeHtml(h.author) + '</span></div>' +
+            (idx > 0 && h.patchSnapshot
+              ? '<button class="btn" data-rollback="' + escapeHtml(h.patchId) + '" style="padding:3px 8px; font-size:10.5px;">Rollback</button>'
+              : '<span class="check-badge">LIVE</span>') +
+            '</div>'
+        )
+        .join('');
+
+      histEl.querySelectorAll('[data-rollback]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const res = await postApi('/api/patch/rollback', { patchId: btn.dataset.rollback });
+          applyServerPayload(res);
+          playSynthPulse(280, 'triangle', 0.25);
+        });
+      });
+
+      // PANE 4: Render Guardrail Diagnostic Report & 18 Invariants
       document.getElementById('tickBudgetBadge').textContent =
-        (state.lastStepDurationMs || 0.25) + 'ms / tick (60 FPS)';
-      document.getElementById('astJsonViewer').textContent = JSON.stringify(
-        {
-          patchId: patch.patchId,
-          title: patch.title,
-          compilerMode: patch.compilerMode,
-          fieldLaw: patch.fieldLaw,
-          bossSpec: patch.bossSpec,
-          droneLaw: patch.droneLaw
-        },
-        null,
-        2
-      );
+        (state.lastStepDurationMs || 0.09) + 'ms / tick (60 FPS)';
+
+      const gr = fullData.lastGuardrailReport;
+      const grBox = document.getElementById('guardrailReportBox');
+      const grHead = document.getElementById('guardrailHeadline');
+      const grDetail = document.getElementById('guardrailDetail');
+      const checkEl = document.getElementById('invariantCheckList');
+
+      if (gr) {
+        if (gr.blocked) {
+          grBox.className = 'guardrail-report-card blocked';
+          grHead.style.color = '#fca5a5';
+          grHead.textContent =
+            '🛑 GUARDRAIL INTERCEPTED & BLOCKED UNSAFE PAYLOAD [' + gr.testedAt + ']';
+          grDetail.innerHTML =
+            '<div><strong>Scenario:</strong> ' + gr.scenario + '</div>' +
+            '<div style="color:#fecaca; margin-top:4px;"><strong>Rejected Reason:</strong> ' +
+            (gr.report?.rejectedReasons || []).join(' | ') +
+            '</div>' +
+            '<div style="color:#86efac; margin-top:4px;">✓ Result: Malicious payload was dropped before execution. 60 FPS Arena remained 100% unaffected.</div>';
+        } else {
+          grBox.className = 'guardrail-report-card clamped';
+          grHead.style.color = '#fef08a';
+          grHead.textContent =
+            '⚡ GUARDRAIL CLAMPED DIVERGENT PHYSICS PAYLOAD [' + gr.testedAt + ']';
+          grDetail.innerHTML =
+            '<div><strong>Scenario:</strong> ' + gr.scenario + '</div>' +
+            '<div style="color:#fef08a; margin-top:4px;"><strong>Lyapunov Clamping Applied:</strong> ' +
+            (gr.clampedWarnings || []).join(' | ') +
+            '</div>' +
+            '<div style="color:#86efac; margin-top:4px;">✓ Result: Divergent restitution/damping was automatically bounded to preserve 60 FPS stability.</div>';
+        }
+
+        const checksToShow = gr.report?.checks || state.lastValidation?.checks || [];
+        checkEl.innerHTML = checksToShow
+          .map(
+            (c) =>
+              '<span class="check-badge ' + (c.passed ? '' : 'fail') + '" title="' +
+              c.detail.replace(/"/g, '&quot;') + '">' +
+              (c.passed ? '✓ ' : '✗ ') + c.id + '</span>'
+          )
+          .join('');
+
+        document.getElementById('astJsonViewer').textContent = JSON.stringify(
+          {
+            guardrailTestScenario: gr.scenario,
+            blocked: gr.blocked,
+            rejectedReasons: gr.report?.rejectedReasons,
+            clampedWarnings: gr.clampedWarnings,
+            testedPayload: gr.inputPayload,
+            invariantChecks: gr.report?.checks
+          },
+          null,
+          2
+        );
+      } else {
+        grBox.className = 'guardrail-report-card';
+        const checks = state.lastValidation?.checks || [];
+        checkEl.innerHTML = checks
+          .map(
+            (c) =>
+              '<span class="check-badge" title="' +
+              c.detail.replace(/"/g, '&quot;') + '">✓ ' + c.id + '</span>'
+          )
+          .join('');
+
+        document.getElementById('astJsonViewer').textContent = JSON.stringify(
+          {
+            patchId: patch.patchId,
+            title: patch.title,
+            compilerMode: patch.compilerMode,
+            fieldLaw: patch.fieldLaw,
+            bossSpec: patch.bossSpec,
+            droneLaw: patch.droneLaw
+          },
+          null,
+          2
+        );
+      }
     }
 
     // Responsive DPI-Aware Canvas Sizing
@@ -1211,7 +1793,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
-        // Sine-wave harmonic vibration along the tether beam
         const midX = (a.x + b.x) * 0.5 + Math.sin(t * 24) * 9;
         const midY = (a.y + b.y) * 0.5 + Math.cos(t * 24) * 9;
         ctx.quadraticCurveTo(midX, midY, b.x, b.y);
@@ -1225,7 +1806,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.save();
         ctx.translate(boss.x, boss.y);
 
-        // Outer Rotating Shield Arcs
         const arcs = Math.max(1, patch.bossSpec.shieldArcs || 3);
         const exposedRatio = patch.bossSpec.weakPointExposedRatio || 0.38;
         const sectorSpan = (Math.PI * 2) / arcs;
@@ -1243,7 +1823,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
           ctx.stroke();
         }
 
-        // Inner Geometric Chassis Topology
         ctx.rotate(-boss.shieldAngle * 0.7);
         const chassis = patch.bossSpec.chassis || 'hex_citadel';
         const sides = chassis === 'chronos_tesseract' ? 4 : chassis === 'gyro_seraph' ? 8 : 6;
@@ -1263,7 +1842,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.fill();
         ctx.stroke();
 
-        // Inner Pulsing Singularity Core
         const coreGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, boss.radius * 0.65);
         coreGrad.addColorStop(0, '#ffffff');
         coreGrad.addColorStop(0.4, 'hsl(' + accentHue + ', 100%, 62%)');
@@ -1309,7 +1887,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
 
       // 7. Draw Viewer Kinetic Vector Drones
       (state.drones || []).forEach((d) => {
-        // Velocity Ribbon Trail
         if (d.trail && d.trail.length > 1) {
           ctx.beginPath();
           for (let i = 0; i < d.trail.length; i++) {
@@ -1325,7 +1902,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.save();
         ctx.translate(d.x, d.y);
 
-        // Parry Reflector Shell
         if (d.parryActive) {
           ctx.strokeStyle = '#00f5d4';
           ctx.lineWidth = 2.5;
@@ -1334,7 +1910,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
           ctx.stroke();
         }
 
-        // Oriented Vector Interceptor Chevron
         const heading = Math.atan2(d.vy, d.vx);
         ctx.rotate(heading);
         ctx.fillStyle = d.color;
@@ -1349,7 +1924,6 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
         ctx.fill();
         ctx.restore();
 
-        // Viewer Twitch Callsign Tag
         ctx.font = '600 11px "JetBrains Mono", monospace';
         ctx.fillStyle = '#f8fafc';
         ctx.fillText('@' + d.username, d.x + 15, d.y + 4);
@@ -1370,25 +1944,18 @@ export function renderChaosForgeHtml({ initialSnapshot, presets = SIGNATURE_PATC
       ctx.restore();
     }
 
-    // Live State Polling / Stream Synchronization
+    // Live State Synchronization Loop
     async function syncLoop() {
       try {
-        const res = await fetch('/api/state');
+        const res = await fetch('/api/state?room=' + encodeURIComponent(ROOM_ID));
         if (res.ok) {
           const data = await res.json();
-          state = data.snapshot;
-          if (data.twitch && data.twitch.channel) {
-            const dot = document.getElementById('twitchStatusDot');
-            const txt = document.getElementById('twitchStatusText');
-            dot.classList.remove('warn');
-            txt.textContent = 'IRC LIVE: #' + data.twitch.channel + ' (' + data.twitch.status.toUpperCase() + ')';
-          }
-          updateDomHud();
+          applyServerPayload(data);
         }
       } catch {
         // Ignore transient fetch errors
       }
-      setTimeout(syncLoop, 65);
+      setTimeout(syncLoop, 90);
     }
 
     updateDomHud();

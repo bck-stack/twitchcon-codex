@@ -370,6 +370,10 @@ export class TwitchIrcLiveConnector {
     this.messagesReceived = 0;
     this.commandsRouted = 0;
     this.lastActivityAt = null;
+    this.reconnectAttempts = 0;
+    this.reconnectTimer = null;
+    this.autoReconnect = false;
+    this.connectionOptions = null;
   }
 
   connect(channelName, { oauthToken = process.env.TWITCH_OAUTH_TOKEN, botNick = process.env.TWITCH_BOT_USERNAME } = {}) {
@@ -387,6 +391,8 @@ export class TwitchIrcLiveConnector {
     this.channel = cleanChannel;
     this.status = 'connecting';
     this.authenticated = Boolean(oauthToken && botNick);
+    this.autoReconnect = true;
+    this.connectionOptions = { oauthToken, botNick };
     this.onStatusChange(this.getStatus());
 
     const WebSocketImpl = globalThis.WebSocket;
@@ -412,7 +418,7 @@ export class TwitchIrcLiveConnector {
         ws.send(`NICK ${anonNick}`);
       }
       ws.send(`JOIN #${this.channel}`);
-      this.status = 'connected';
+      this.status = 'authenticating';
       this.lastActivityAt = Date.now();
       this.onStatusChange(this.getStatus());
     });
@@ -422,6 +428,13 @@ export class TwitchIrcLiveConnector {
       const chunk = String(event.data || '');
       const lines = chunk.split(/\r?\n/);
       for (const line of lines) {
+        if (/\s001\s/.test(line)) {
+          this.status = 'connected';
+          this.reconnectAttempts = 0;
+          this.lastActivityAt = Date.now();
+          this.onStatusChange(this.getStatus());
+          continue;
+        }
         const parsed = parseTwitchIrcLine(line);
         if (!parsed) continue;
         if (parsed.type === 'PING') {
@@ -458,6 +471,7 @@ export class TwitchIrcLiveConnector {
       if (this.ws !== ws) return;
       this.status = 'disconnected';
       this.onStatusChange(this.getStatus());
+        this.scheduleReconnect();
     });
 
     ws.addEventListener('error', () => {
@@ -484,6 +498,11 @@ export class TwitchIrcLiveConnector {
   }
 
   disconnect() {
+    this.autoReconnect = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       try {
         this.ws.close();
@@ -504,7 +523,19 @@ export class TwitchIrcLiveConnector {
       endpoint: 'wss://irc-ws.chat.twitch.tv:443',
       messagesReceived: this.messagesReceived,
       commandsRouted: this.commandsRouted,
-      lastActivityAt: this.lastActivityAt
+      lastActivityAt: this.lastActivityAt,
+      reconnectAttempts: this.reconnectAttempts
     };
+  }
+
+  scheduleReconnect() {
+    if (!this.autoReconnect || !this.channel || this.reconnectTimer) return;
+    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5));
+    this.reconnectAttempts += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.autoReconnect || !this.channel) return;
+      this.connect(this.channel, this.connectionOptions || {});
+    }, delay);
   }
 }

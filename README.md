@@ -64,3 +64,39 @@ export TWITCH_CHANNEL="your_channel_name"
 export TWITCH_OAUTH_TOKEN="oauth:..."
 export TWITCH_BOT_USERNAME="your_bot_nick"
 ```
+
+## Run and deploy
+
+Every browser visit receives an isolated temporary arena room. There is no
+default channel: enter a Twitch channel in the studio, then connect. The
+anonymous IRC bridge can read public chat; authenticated chat replies and real
+EventSub require Twitch credentials configured on the server only.
+
+```bash
+cp .env.example .env
+npm test
+npm start
+```
+
+For a container host that supports long-running Node services:
+
+```bash
+docker build -t chaosforge .
+docker run --rm -p 4400:4400 --env-file .env chaosforge
+```
+
+Use `GET /healthz` as the deployment health check. Keep `OPENAI_API_KEY`,
+`TWITCH_CLIENT_SECRET`, and `TWITCH_EVENTSUB_SECRET` in host-managed secret
+variables; never enter them in the web UI or commit them to the repository.
+
+### Judge demo flow
+
+1. Open the public URL. A fresh room URL is created automatically.
+2. In **Twitch API & Chat**, optionally enter any public Twitch channel to
+   observe chat, or use the built-in chat box and EventSub simulation buttons.
+3. In **Codex Live Rule Mutator**, apply a natural-language rule.
+4. In **Diff Summary**, inspect the AST changes and roll back.
+5. In **Test Guardrail**, run both safety demonstrations.
+
+The deterministic compiler keeps this complete demo flow available even when no
+third-party credential is configured.
