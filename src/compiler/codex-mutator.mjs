@@ -383,6 +383,7 @@ export async function compileNaturalLanguagePatch({
   const matchedPreset = SIGNATURE_PATCH_PRESETS.find((p) => p.id === cleanPrompt);
   let rawCandidate = null;
   let compilerMode = 'codex-semantic-ast';
+  let llmFallbackReason = null;
 
   if (matchedPreset) {
     rawCandidate = structuredClone(matchedPreset.candidate);
@@ -408,7 +409,8 @@ export async function compileNaturalLanguagePatch({
               content:
                 'You are the ChaosForge Live Physics & Boss AST Compiler for Twitch streams. ' +
                 'Convert the viewer or streamer natural-language mutation directive into a valid ArenaPatch JSON object matching the strict schema. ' +
-                'Output must be valid raw JSON with keys: title, fieldLaw, bossSpec, droneLaw, aesthetics. No markdown, no prose.'
+                'Output must be valid raw JSON with keys: title, fieldLaw, bossSpec, droneLaw, aesthetics. No markdown, no prose.' +
+                (isGroq ? ' JSON Schema (follow exactly, use only listed enum values): ' + JSON.stringify(OPENAI_ARENA_PATCH_JSON_SCHEMA.schema) : '')
             },
             {
               role: 'user',
@@ -445,23 +447,37 @@ export async function compileNaturalLanguagePatch({
           if (content) {
             rawCandidate = JSON.parse(content);
             compilerMode = `${isGroq ? 'groq-live' : 'openai-live'} (${selectedModel})`;
+          } else {
+            llmFallbackReason = 'empty response';
           }
+        } else {
+          llmFallbackReason = `HTTP ${response.status}`;
         }
-      } catch {
-        // Fallback cleanly to deterministic semantic AST synthesis
+      } catch (error) {
+        llmFallbackReason = error?.name === 'SyntaxError' ? 'invalid JSON' : 'network error';
       }
     }
   }
 
   if (!rawCandidate) {
     rawCandidate = synthesizeSemanticCandidate(cleanPrompt, currentPatch);
+    if (llmFallbackReason) compilerMode = `codex-semantic-ast (LLM fallback: ${llmFallbackReason})`;
   }
 
-  const validation = validateAndNormalizePatch(rawCandidate, {
+  let validation = validateAndNormalizePatch(rawCandidate, {
     author,
     sourcePrompt: cleanPrompt,
     compilerMode
   });
+
+  // An LLM can return JSON that fails the strict schema. Keep the stream alive
+  // with the deterministic compiler and say so in the log.
+  if (!validation.valid && compilerMode.includes('-live')) {
+    const reasons = (validation.rejectedReasons || []).slice(0, 2).join('; ');
+    compilerMode = `codex-semantic-ast (LLM output rejected: ${reasons || 'schema'})`;
+    rawCandidate = synthesizeSemanticCandidate(cleanPrompt, currentPatch);
+    validation = validateAndNormalizePatch(rawCandidate, { author, sourcePrompt: cleanPrompt, compilerMode });
+  }
 
   const compileLatencyMs = Number((performance.now() - startedAt).toFixed(2));
   if (!validation.valid) {

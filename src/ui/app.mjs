@@ -1085,10 +1085,10 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
             <!-- Chat message composer -->
             <div class="input-row" style="margin-top:4px;">
-              <input type="text" class="text-input" id="inputTwitchMessage" placeholder="Type a message or command (!join, !slingshot, !patch)..." maxlength="500" />
-              <button class="btn btn-primary" id="btnSendToTwitch">Send</button>
+              <input type="text" class="text-input" id="inputTwitchMessage" placeholder="Write to the connected Twitch chat (!join, !slingshot, !patch ...)" maxlength="500" />
+              <button class="btn btn-primary" id="btnSendToTwitch">Send to Twitch</button>
             </div>
-            <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Type above or in your Twitch chat to send live messages and drive the 60 FPS arena.</div>
+            <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Connect Live IRC to a channel to read its chat. Connect My Twitch Account to post.</div>
 
           </div>
 
@@ -1567,28 +1567,33 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       window.location.assign('/auth/twitch/connect?room=' + encodeURIComponent(ROOM_ID));
     });
 
+    let twitchSendNotice = null;
     async function sendToTwitch() {
       const input = document.getElementById('inputTwitchMessage');
       const message = input.value.trim();
       if (!message) return;
-      input.value = '';
-
       const canWriteTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
-      const username = fullData.twitch?.identity?.login || fullData.twitch?.channel || 'viewer';
-
-      // Always send to game and chat stream immediately — zero authorization required!
-      const res = await postApi('/api/chat/send', {
-        username,
-        message,
-        source: canWriteTwitch ? `twitch-chat (#${fullData.twitch.channel})` : (fullData.twitch?.channel ? `live-chat (#${fullData.twitch.channel})` : 'live-chat'),
-        badge: canWriteTwitch ? 'TWITCH' : 'CHAT'
-      });
-      applyServerPayload(res);
-
-      // If Twitch OAuth is authenticated, also mirror out to Twitch IRC
-      if (canWriteTwitch) {
-        postApi('/api/twitch/say', { message }).catch(() => {});
+      if (!canWriteTwitch) {
+        // Twitch only accepts chat messages from an authorized account. Reading
+        // a public channel works anonymously; writing does not.
+        twitchSendNotice = {
+          text: fullData.twitch?.identity?.login
+            ? 'Twitch session is not connected yet. Press Connect Live IRC and try again.'
+            : 'Writing to Twitch requires Connect My Twitch Account. Reading public chat works without it.',
+          until: Date.now() + 7000
+        };
+        updateDomHud();
+        return;
       }
+      const res = await postApi('/api/twitch/say', { message });
+      if (res.ok) {
+        input.value = '';
+        twitchSendNotice = null;
+      } else {
+        twitchSendNotice = { text: res.error || 'Twitch rejected the message.', until: Date.now() + 7000 };
+      }
+      applyServerPayload(res.ok ? res : null);
+      updateDomHud();
     }
 
     document.getElementById('btnSendToTwitch').addEventListener('click', sendToTwitch);
@@ -1779,10 +1784,22 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const twitchMessageHelp = document.getElementById('twitchMessageHelp');
       const canWriteToTwitch = Boolean(fullData.twitch?.authenticated && fullData.twitch?.identity?.login && fullData.twitch?.status === 'connected');
       sendToTwitchButton.disabled = false;
-      twitchMessageHelp.textContent = canWriteToTwitch
-        ? 'Connected as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Messages mirror to Twitch chat and drive the arena.'
-        : 'Type here or in #' + (fullData.twitch?.channel || 'your_channel') + ' Twitch chat to drive the arena live.';
-      if (fullData.twitch?.identity?.login) {
+      if (twitchSendNotice && twitchSendNotice.until > Date.now()) {
+        twitchMessageHelp.textContent = twitchSendNotice.text;
+        twitchMessageHelp.style.color = 'var(--accent-amber)';
+      } else {
+        twitchMessageHelp.style.color = 'var(--text-dim)';
+        twitchMessageHelp.textContent = canWriteToTwitch
+          ? 'Posting as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Your messages and !commands also drive the arena.'
+          : fullData.twitch?.channel
+            ? 'Reading #' + fullData.twitch.channel + ' live. Connect My Twitch Account to post from here.'
+            : 'Connect Live IRC to a channel to read its chat. Connect My Twitch Account to post.';
+      }
+      if (fullData.twitch?.identity?.login && fullData.twitch?.authFailed) {
+        oauthButton.textContent = 'Re-authorize Twitch (token rejected)';
+        oauthButton.disabled = false;
+        disconnectAccountButton.disabled = false;
+      } else if (fullData.twitch?.identity?.login) {
         oauthButton.textContent = 'Twitch Authorized: @' + fullData.twitch.identity.login;
         oauthButton.disabled = true;
         disconnectAccountButton.disabled = false;

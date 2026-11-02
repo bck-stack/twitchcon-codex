@@ -434,22 +434,23 @@ export class TwitchIrcLiveConnector {
       const chunk = String(event.data || '');
       const lines = chunk.split(/\r?\n/);
       for (const line of lines) {
-        if (/Login authentication failed/i.test(line)) {
+        if (/Login authentication failed|Improperly formatted auth/i.test(line)) {
+          // Token rejected (expired or missing chat:read/chat:edit). Keep reading
+          // the channel anonymously instead of looping on a dead socket.
+          const targetChan = this.channel;
           this.authenticated = false;
           this.connectionOptions = null;
-          const targetChan = this.channel;
-          this.status = 'connecting';
-          this.onStatusChange(this.getStatus());
+          this.authFailed = true;
+          this.ws = null;
           try { ws.close(); } catch {}
           setTimeout(() => {
-            if (targetChan) {
-              this.connect(targetChan, { oauthToken: null, botNick: null });
-            }
+            if (targetChan) this.connect(targetChan, { oauthToken: null, botNick: null });
           }, 200);
           return;
         }
         if (/\s001\s/.test(line)) {
           this.status = 'connected';
+          if (this.authenticated) this.authFailed = false;
           this.reconnectAttempts = 0;
           this.lastActivityAt = Date.now();
           this.onStatusChange(this.getStatus());
@@ -554,6 +555,7 @@ export class TwitchIrcLiveConnector {
       status: this.status,
       channel: this.channel,
       authenticated: this.authenticated,
+      authFailed: Boolean(this.authFailed),
       endpoint: 'wss://irc-ws.chat.twitch.tv:443',
       messagesReceived: this.messagesReceived,
       commandsRouted: this.commandsRouted,
@@ -566,10 +568,6 @@ export class TwitchIrcLiveConnector {
     if (!this.autoReconnect || !this.channel || this.reconnectTimer) return;
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5));
     this.reconnectAttempts += 1;
-    if (this.reconnectAttempts >= 2 && this.connectionOptions?.oauthToken) {
-      this.connectionOptions = null;
-      this.authenticated = false;
-    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.autoReconnect || !this.channel) return;

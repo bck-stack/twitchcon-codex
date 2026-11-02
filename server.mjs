@@ -221,7 +221,8 @@ export const server = http.createServer(async (req, res) => {
         sendJson(res, 429, { ok: false, error: 'Twitch chat is temporarily rate-limited or unavailable.' }); return;
       }
       room.state.lastTwitchMessageAt = Date.now();
-      pushChat(room, { username: room.state.twitchIdentity.login, color: '#86efac', message, source: `twitch-outgoing (#${room.state.channel})`, badge: 'OUTGOING' });
+      // Twitch IRC does not echo our own PRIVMSG back, so route it into the arena here.
+      await processIncoming(room, { username: room.state.twitchIdentity.login, color: '#86efac', message, source: `twitch-outgoing (#${room.state.channel})`, badge: 'OUTGOING' });
       sendJson(res, 200, payload(room)); return;
     }
     if (req.method === 'POST' && url.pathname === '/api/chat/send') { const processed = await processIncoming(room, { username: body.username || 'viewer', color: body.color || '#00F5D4', message: body.message, source: body.source || 'studio-live-chat', badge: body.badge || 'CHAT' }); sendJson(res, 200, { ...payload(room), processed }); return; }
