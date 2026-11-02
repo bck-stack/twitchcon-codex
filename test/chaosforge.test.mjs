@@ -62,7 +62,7 @@ test('ArenaPatchSchema validator enforces Lyapunov energy bounds and rejects exe
 test('NL-to-AST compiler translates natural-language Twitch !patch prompts into validated ArenaPatches with structural diffs', async () => {
   const result = await compileNaturalLanguagePatch({
     prompt: 'Split gravity into twin binary pulsar wells with prism ricochet lasers and 3x tether whip cleave',
-    author: 'talhacomak',
+    author: 'viewer_alpha',
     currentPatch: DEFAULT_ARENA_PATCH
   });
 
@@ -91,12 +91,12 @@ test('ChaosForgeArenaEngine steps deterministically at 60 FPS, links Verlet teth
   const engine = new ChaosForgeArenaEngine({ width: 1280, height: 720 });
 
   engine.handleChatCommand({ username: 'bck_stack', color: '#00F5D4', command: 'join' });
-  engine.handleChatCommand({ username: 'talhacomak', color: '#FF4D6D', command: 'join' });
+  engine.handleChatCommand({ username: 'viewer_beta', color: '#FF4D6D', command: 'join' });
   engine.handleChatCommand({
     username: 'bck_stack',
     color: '#00F5D4',
     command: 'tether',
-    argsText: '@talhacomak'
+    argsText: '@viewer_beta'
   });
 
   assert.equal(engine.drones.size, 2);
@@ -123,7 +123,7 @@ test('Twitch EventSub HMAC-SHA256 webhook signature verifier and Raid/HypeTrain 
   const secret = 'test-eventsub-secret';
   const msgId = 'msg-001';
   const msgTs = '2026-11-02T00:00:00Z';
-  const rawBody = JSON.stringify({ subscription: { type: 'channel.raid' }, event: { from_broadcaster_user_name: 'talhacomak', viewers: 45 } });
+  const rawBody = JSON.stringify({ subscription: { type: 'channel.raid' }, event: { from_broadcaster_user_name: 'raider_boss', viewers: 45 } });
   const validSig = 'sha256=' + crypto.createHmac('sha256', secret).update(`${msgId}${msgTs}${rawBody}`).digest('hex');
 
   assert.equal(
@@ -138,7 +138,7 @@ test('Twitch EventSub HMAC-SHA256 webhook signature verifier and Raid/HypeTrain 
   );
 
   const raidDirective = normalizeTwitchEventSubPayload('channel.raid', {
-    from_broadcaster_user_name: 'talhacomak',
+    from_broadcaster_user_name: 'raider_boss',
     viewers: 45
   });
   assert.equal(raidDirective.eventType, 'channel.raid');
