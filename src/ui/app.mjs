@@ -1348,6 +1348,9 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           });
         };
         cards.forEach((card) => {
+          // `grow` belongs to the pre-accordion layout. If it remains, a
+          // closed card still consumes the entire right panel.
+          card.classList.remove('grow');
           card.classList.add('accordion-card');
           let toggle = card.querySelector(':scope > .sub-label');
           if (toggle) {
