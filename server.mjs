@@ -41,7 +41,7 @@ function pushCodexLog(room, { author, prompt, compilerMode, compileLatencyMs, pa
 }
 
 function makeRoom(roomId = makeRoomId()) {
-  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), lastTwitchMessageAt: 0, channel: null, twitchIdentity: null } };
+  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), lastTwitchMessageAt: 0, channel: null, twitchIdentity: null, apiKey: null, apiProvider: null } };
   room.eventSub = new TwitchHelixAndEventSubClient({ onEventSubDirective: async (directive) => {
     room.engine.applyEventSubDirective(directive);
     pushChat(room, { username: directive.username || 'twitch_eventsub', color: '#FEE440', message: `[EventSub ${directive.eventType}] ${directive.headline}`, source: 'twitch-eventsub', badge: 'EVENTSUB', reply: `Applied arena kinetic wave (Boss DMG: -${directive.bossDamage || 0})` });
@@ -65,7 +65,17 @@ async function processIncoming(room, { username, color = '#00F5D4', message, sou
       if (Date.now() - last < PATCH_COOLDOWN_MS) reply = 'Patch cooldown: wait a few seconds before your next live rule change.';
       else {
         room.state.lastPatchByAuthor.set(author, Date.now()); const prompt = argsText || 'Split gravity into twin binary pulsar wells with prism ricochet beams'; const previous = structuredClone(room.engine.activePatch);
-        const compiled = await compileNaturalLanguagePatch({ prompt, author, currentPatch: previous });
+        const activeKey = room.state.apiKey || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+        const activeModel = room.state.apiProvider === 'groq' || (activeKey && activeKey.startsWith('gsk_'))
+          ? 'llama-3.3-70b-versatile'
+          : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
+        const compiled = await compileNaturalLanguagePatch({
+          prompt,
+          author,
+          currentPatch: previous,
+          apiKey: activeKey,
+          model: activeModel
+        });
         if (compiled.ok) { room.engine.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation); codexEntry = pushCodexLog(room, { author, prompt, compilerMode: compiled.compilerMode, compileLatencyMs: compiled.compileLatencyMs, patch: compiled.patch, diffs: compiled.diffs }); reply = `CODEX AST HOT-SWAP -> [${compiled.patch.title}] (${compiled.diffs.length} rules changed)`; }
         else reply = `GUARDRAIL REJECTED !patch: ${(compiled.validation?.rejectedReasons || ['Unsafe AST']).join(', ')}`;
       }
@@ -75,7 +85,31 @@ async function processIncoming(room, { username, color = '#00F5D4', message, sou
   const chatEntry = pushChat(room, { username: author, color, message: text, source, badge, reply }); if (reply && room.twitch.authenticated) room.twitch.say(`[ChaosForge] ${reply}`); return { chatEntry, codexEntry };
 }
 
-function payload(room) { return { ok: true, room: { id: room.id, expiresAt: room.createdAt + ROOM_TTL_MS }, twitch: { ...room.twitch.getStatus(), oauthConfigured: twitchOAuthConfigured(), identity: room.state.twitchIdentity }, eventsub: room.eventSub.getStatus(), codex: { connected: true, hasApiKey: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-4o-mini', schemaName: 'ArenaPatchSchema v1 (strict)', logs: room.state.codexLogs }, chatMessages: room.state.chatMessages, lastDiffs: room.state.lastDiffs, lastGuardrailReport: room.state.lastGuardrailReport, snapshot: room.engine.getSnapshot() }; }
+function payload(room) {
+  const activeKey = room.state.apiKey || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+  const isGroq = activeKey ? activeKey.startsWith('gsk_') : false;
+  const isOpenAi = activeKey ? activeKey.startsWith('sk-') : false;
+  const provider = isGroq ? 'groq' : isOpenAi ? 'openai' : 'semantic-local';
+  const modelName = isGroq ? 'llama-3.3-70b-versatile' : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
+  return {
+    ok: true,
+    room: { id: room.id, expiresAt: room.createdAt + ROOM_TTL_MS },
+    twitch: { ...room.twitch.getStatus(), oauthConfigured: twitchOAuthConfigured(), identity: room.state.twitchIdentity },
+    eventsub: room.eventSub.getStatus(),
+    codex: {
+      connected: true,
+      hasApiKey: Boolean(activeKey),
+      provider,
+      model: Boolean(activeKey) ? modelName : 'Local Semantic AST',
+      schemaName: 'ArenaPatchSchema v1 (strict)',
+      logs: room.state.codexLogs
+    },
+    chatMessages: room.state.chatMessages,
+    lastDiffs: room.state.lastDiffs,
+    lastGuardrailReport: room.state.lastGuardrailReport,
+    snapshot: room.engine.getSnapshot()
+  };
+}
 const SECURITY_HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://irc-ws.chat.twitch.tv; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'" };
 function sendJson(res, status, body) { res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); }
 function readRawBody(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', (chunk) => { raw += chunk; if (raw.length > 64_000) { reject(new Error('Request body too large')); req.destroy(); } }); req.on('end', () => resolve(raw)); req.on('error', reject); }); }
@@ -195,6 +229,26 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/patch/rollback') { const previous = structuredClone(room.engine.activePatch); const rolled = room.engine.rollbackToPatch(body.patchId); if (!rolled) { sendJson(res, 404, { ok: false, error: 'Patch ID not found in this room history' }); return; } const diffs = computePatchDiff(previous, rolled); pushCodexLog(room, { author: 'room_rollback', prompt: `Rollback to ${rolled.title}`, compilerMode: 'ast-snapshot-rollback', compileLatencyMs: 0.1, patch: rolled, diffs }); sendJson(res, 200, { ...payload(room), patch: rolled, diffs }); return; }
     if (req.method === 'POST' && url.pathname === '/api/patch/test-guardrail') { const energy = body.scenario === 'energy_divergence'; const adversarial = energy ? { title: 'Unbounded Kinetic Explosion', fieldLaw: { type: 'zero_g_drift', gravityStrength: 9999, vortexTorque: -9999, damping: 0.999, restitution: 2.85, tetherStiffness: 4.5 }, bossSpec: { name: 'Divergent Boss', chassis: 'gyro_seraph', shieldArcs: 12, rotationSpeed: 15, aggression: 9, projectileSpeed: 4000, behaviorSequence: ['ricochet_prism_beam'] } } : { title: 'Malicious Exploit eval(window.location)', fieldLaw: { type: 'central_attractor', gravityStrength: 'function(){ return eval("alert(1)"); }' } }; const report = validateAndNormalizePatch(adversarial); room.state.lastGuardrailReport = { testedAt: nowLabel(), scenario: energy ? 'Energy divergence' : 'Executable code injection', blocked: !report.valid, clampedWarnings: report.warnings || [], inputPayload: adversarial, report }; sendJson(res, 200, { ...payload(room), guardrailResult: room.state.lastGuardrailReport }); return; }
     if (req.method === 'POST' && url.pathname === '/api/twitch/eventsub/simulate') { const directive = room.eventSub.triggerEvent(body.type || 'channel.raid', body.event || { user_name: body.username || 'viewer', from_broadcaster_user_name: body.username || 'viewer', viewers: body.viewers || 45, bits: body.bits || 500, tier: body.tier || '3000', level: body.level || 4 }, 'studio_simulation'); sendJson(res, 200, { ...payload(room), directive }); return; }
+    if (req.method === 'POST' && url.pathname === '/api/codex/config') {
+      const rawKey = String(body?.apiKey || '').trim();
+      if (!rawKey) {
+        room.state.apiKey = null;
+        room.state.apiProvider = null;
+        pushChat(room, { username: 'system', message: 'Codex compiler reverted to deterministic local semantic AST mode.', source: 'codex-config', badge: 'LOCAL_AST' });
+      } else if (rawKey.startsWith('gsk_')) {
+        room.state.apiKey = rawKey;
+        room.state.apiProvider = 'groq';
+        pushChat(room, { username: 'system', message: 'Connected Groq Cloud LLM (llama-3.3-70b-versatile) for live rule compilations.', source: 'codex-config', badge: 'GROQ_CONNECTED' });
+      } else if (rawKey.startsWith('sk-')) {
+        room.state.apiKey = rawKey;
+        room.state.apiProvider = 'openai';
+        pushChat(room, { username: 'system', message: 'Connected OpenAI Codex LLM (gpt-4o-mini) for live rule compilations.', source: 'codex-config', badge: 'OPENAI_CONNECTED' });
+      } else {
+        sendJson(res, 400, { ok: false, error: 'Unrecognized API key format. Please enter a Groq key (starts with gsk_) or OpenAI key (starts with sk-).' });
+        return;
+      }
+      sendJson(res, 200, payload(room)); return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/twitch/connect') { const channel = cleanChannel(body.channel); if (!channel) { sendJson(res, 400, { ok: false, error: 'Enter a valid Twitch channel name.' }); return; } if (room.state.channel) channelRooms.delete(room.state.channel); room.state.channel = channel; channelRooms.set(channel, room.id); const status = room.twitch.connect(channel); pushChat(room, { username: 'system', message: `Connecting server IRC bridge to #${channel}; anonymous mode reads chat only.`, source: 'twitch-irc', badge: 'SYSTEM' }); sendJson(res, 200, { ...payload(room), status }); return; }
     sendJson(res, 404, { ok: false, error: 'Not found' });
   } catch (error) { sendJson(res, 400, { ok: false, error: error.message || 'Bad request' }); }

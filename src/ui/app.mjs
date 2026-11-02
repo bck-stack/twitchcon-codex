@@ -1149,10 +1149,19 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           <!-- Codex Connection Bar -->
           <div class="section-box">
             <div class="sub-label">
-              <span>OpenAI Codex Compiler Connection (server-managed)</span>
-              <span id="codexConnStateLabel" style="color:#86efac;">● CONNECTED (ArenaPatchSchema v1)</span>
+              <span>OpenAI / Groq Compiler Connection</span>
+              <span id="codexConnStateLabel" style="color:#86efac;">● Connected (ArenaPatchSchema v1)</span>
             </div>
-            <div class="pane-desc">The deployment owns its compiler configuration. Visitors never paste or expose an API key in the browser.</div>
+            <div class="pane-desc" style="margin-bottom:8px;">
+              Live AST compiler. Enter a Groq (<code>gsk_...</code>) or OpenAI (<code>sk-...</code>) API key for live cloud LLM synthesis, or leave blank for local deterministic AST.
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
+              <input type="password" class="text-input" id="inputCodexKey" placeholder="Paste Groq (gsk_...) or OpenAI (sk-...) key" style="flex:1; font-family:monospace;" />
+              <button class="btn btn-primary" id="btnConnectCodex" style="flex-shrink:0;">Connect</button>
+            </div>
+            <div id="codexKeyStatusMsg" style="font-size:11px; color:var(--text-dim); margin-top:2px;">
+              Key is isolated to your live room session and never logged or exposed.
+            </div>
           </div>
 
           <!-- Codex Prompt Box -->
@@ -1588,6 +1597,39 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     // =========================================================================
     // PANE 2 ACTIONS: CODEX LIVE RULE MUTATOR (!PATCH)
     // =========================================================================
+    const btnConnectCodex = document.getElementById('btnConnectCodex');
+    const inputCodexKey = document.getElementById('inputCodexKey');
+    const codexKeyStatusMsg = document.getElementById('codexKeyStatusMsg');
+    if (btnConnectCodex && inputCodexKey) {
+      btnConnectCodex.addEventListener('click', async () => {
+        const key = inputCodexKey.value.trim();
+        btnConnectCodex.textContent = 'Connecting...';
+        btnConnectCodex.disabled = true;
+        try {
+          const res = await postApi('/api/codex/config', { apiKey: key });
+          applyServerPayload(res);
+          inputCodexKey.value = '';
+          if (res.ok) {
+            const provider = res.codex?.provider;
+            const model = res.codex?.model;
+            codexKeyStatusMsg.textContent = res.codex?.hasApiKey
+              ? 'Connected to ' + (provider === 'groq' ? 'Groq (' + model + ')' : 'OpenAI (' + model + ')') + ' for room ' + ROOM_ID
+              : 'Reverted to local deterministic semantic compiler.';
+            codexKeyStatusMsg.style.color = '#86efac';
+            playSynthPulse(520, 'sine', 0.2);
+          } else {
+            codexKeyStatusMsg.textContent = res.error || 'Connection failed';
+            codexKeyStatusMsg.style.color = '#f87171';
+          }
+        } catch (err) {
+          codexKeyStatusMsg.textContent = err.message || 'Network error';
+          codexKeyStatusMsg.style.color = '#f87171';
+        } finally {
+          btnConnectCodex.textContent = 'Connect';
+          btnConnectCodex.disabled = false;
+        }
+      });
+    }
     async function triggerCompilePatch(promptValue, author = 'viewer') {
       const btn = document.getElementById('btnCompilePatch');
       btn.textContent = 'Codex Compiling AST...';
@@ -1771,7 +1813,18 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           : '<div style="color:var(--text-dim); padding:12px 4px; line-height:1.5;">Waiting for live chat. Send a message in the connected Twitch chat, or open the separate Demo card for a labeled local sequence.</div>';
       }
 
-      // PANE 2: Render Codex Prompt & Response Log
+      // PANE 2: Render Codex Connection & Prompt / Response Log
+      const codexLabel = document.getElementById('codexConnStateLabel');
+      if (codexLabel && fullData.codex) {
+        if (fullData.codex.hasApiKey) {
+          const isGroq = fullData.codex.provider === 'groq';
+          codexLabel.textContent = isGroq ? '● Groq llama-3.3-70b Connected' : '● OpenAI ' + (fullData.codex.model || 'gpt-4o-mini') + ' Connected';
+          codexLabel.style.color = '#86efac';
+        } else {
+          codexLabel.textContent = '● Connected (ArenaPatchSchema v1)';
+          codexLabel.style.color = '#86efac';
+        }
+      }
       const codexLogs = fullData.codex?.logs || [];
       const topCodexId = codexLogs[0]?.id || null;
       if (topCodexId !== lastRenderedCodexId) {

@@ -387,23 +387,28 @@ export async function compileNaturalLanguagePatch({
   if (matchedPreset) {
     rawCandidate = structuredClone(matchedPreset.candidate);
     compilerMode = 'codex-curated-preset';
-  } else if (apiKey && typeof apiKey === 'string' && apiKey.startsWith('sk-')) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.4,
+  } else if (apiKey && typeof apiKey === 'string') {
+    const isGroq = apiKey.startsWith('gsk_');
+    const isOpenAI = apiKey.startsWith('sk-');
+    if (isGroq || isOpenAI) {
+      try {
+        const endpoint = isGroq
+          ? 'https://api.groq.com/openai/v1/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions';
+        const selectedModel = isGroq
+          ? (model && model.includes('llama') ? model : 'llama-3.3-70b-versatile')
+          : (model || 'gpt-4o-mini');
+
+        const requestBody = {
+          model: selectedModel,
+          temperature: 0.3,
           messages: [
             {
               role: 'system',
               content:
                 'You are the ChaosForge Live Physics & Boss AST Compiler for Twitch streams. ' +
-                'Convert the viewer or streamer natural-language mutation directive into a valid ArenaPatch JSON object matching the strict schema.'
+                'Convert the viewer or streamer natural-language mutation directive into a valid ArenaPatch JSON object matching the strict schema. ' +
+                'Output must be valid raw JSON with keys: title, fieldLaw, bossSpec, droneLaw, aesthetics. No markdown, no prose.'
             },
             {
               role: 'user',
@@ -413,24 +418,38 @@ export async function compileNaturalLanguagePatch({
                 bossSpec: currentPatch.bossSpec
               })}\n\nViewer/Streamer mutation request: "${cleanPrompt}"`
             }
-          ],
-          response_format: {
+          ]
+        };
+
+        if (isOpenAI) {
+          requestBody.response_format = {
             type: 'json_schema',
             json_schema: OPENAI_ARENA_PATCH_JSON_SCHEMA
-          }
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const content = data?.choices?.[0]?.message?.content;
-        if (content) {
-          rawCandidate = JSON.parse(content);
-          compilerMode = `openai-structured-json (${model})`;
+          };
+        } else {
+          requestBody.response_format = { type: 'json_object' };
         }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data?.choices?.[0]?.message?.content;
+          if (content) {
+            rawCandidate = JSON.parse(content);
+            compilerMode = `${isGroq ? 'groq-live' : 'openai-live'} (${selectedModel})`;
+          }
+        }
+      } catch {
+        // Fallback cleanly to deterministic semantic AST synthesis
       }
-    } catch {
-      // Fallback cleanly to deterministic semantic AST synthesis
     }
   }
 
