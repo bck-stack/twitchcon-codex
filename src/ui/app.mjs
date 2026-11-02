@@ -1944,7 +1944,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       ctx.restore();
     }
 
-    // Live State Synchronization Loop
+    // Live State Synchronization Loop. Rendering remains requestAnimationFrame
+    // driven; network state only needs a human-visible cadence.
     async function syncLoop() {
       try {
         const res = await fetch('/api/state?room=' + encodeURIComponent(ROOM_ID));
@@ -1955,7 +1956,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       } catch {
         // Ignore transient fetch errors
       }
-      setTimeout(syncLoop, 90);
+      setTimeout(syncLoop, document.visibilityState === 'visible' ? 1000 : 15000);
     }
 
     updateDomHud();
