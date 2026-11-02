@@ -1274,6 +1274,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
     let fullData = INITIAL_PAYLOAD;
     let state = INITIAL_PAYLOAD.snapshot;
+    let snapshotReceivedAt = performance.now();
     let activePane = '1';
     let audioEnabled = false;
     const escapeHtml = (value) => String(value ?? '')
@@ -1348,7 +1349,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           });
         };
         cards.forEach((card) => {
-          // `grow` belongs to the pre-accordion layout. If it remains, a
+          // Grow belongs to the pre-accordion layout. If it remains, a
           // closed card still consumes the entire right panel.
           card.classList.remove('grow');
           card.classList.add('accordion-card');
@@ -1450,6 +1451,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       fullData = data;
       if (data.snapshot) {
         state = data.snapshot;
+        snapshotReceivedAt = performance.now();
       }
       updateDomHud();
     }
@@ -1934,7 +1936,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     function resizeCanvas() {
       const stage = canvas.parentElement;
       const rect = stage.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
       canvas.width = Math.max(640, Math.floor(rect.width * dpr));
       canvas.height = Math.max(360, Math.floor(rect.height * dpr));
     }
@@ -1942,9 +1944,31 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     resizeCanvas();
 
     // 60 FPS Vector Renderer
+    function buildInterpolatedFrame() {
+      const elapsedSec = Math.min(0.35, Math.max(0, (performance.now() - snapshotReceivedAt) / 1000));
+      const project = (entity) => entity ? {
+        ...entity,
+        x: Math.max(-80, Math.min(1360, Number(entity.x || 0) + Number(entity.vx || 0) * elapsedSec)),
+        y: Math.max(-80, Math.min(800, Number(entity.y || 0) + Number(entity.vy || 0) * elapsedSec))
+      } : entity;
+      const patch = state.activePatch;
+      return {
+        ...state,
+        timeSec: Number(state.timeSec || 0) + elapsedSec,
+        boss: state.boss ? {
+          ...project(state.boss),
+          shieldAngle: Number(state.boss.shieldAngle || 0) + Number(patch?.bossSpec?.rotationSpeed || 0) * elapsedSec
+        } : state.boss,
+        drones: (state.drones || []).map(project),
+        projectiles: (state.projectiles || []).map(project)
+      };
+    }
+
     function drawArena() {
       requestAnimationFrame(drawArena);
       if (!state || !state.activePatch) return;
+
+      const frame = buildInterpolatedFrame();
 
       const W = canvas.width;
       const H = canvas.height;
@@ -1954,7 +1978,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       const offsetX = (W - 1280 * scale) * 0.5;
       const offsetY = (H - 720 * scale) * 0.5;
 
-      const patch = state.activePatch;
+      const patch = frame.activePatch;
       const primaryHue = patch.aesthetics?.primaryHue ?? 192;
       const accentHue = patch.aesthetics?.accentHue ?? 325;
 
@@ -1972,14 +1996,14 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       // 1. Draw Warping Vector Field Grid (16x9)
       const cols = 16;
       const rows = 9;
-      const t = state.timeSec || 0;
+      const t = frame.timeSec || 0;
       ctx.lineWidth = 1;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const gx = ((c + 0.5) / cols) * 1280;
           const gy = ((r + 0.5) / rows) * 720;
-          const dx = state.boss.x - gx;
-          const dy = state.boss.y - gy;
+          const dx = frame.boss.x - gx;
+          const dy = frame.boss.y - gy;
           const dist = Math.hypot(dx, dy) + 80;
           const angle = Math.atan2(dy, dx) + (patch.fieldLaw.vortexTorque * 0.004);
           const len = Math.min(24, (Math.abs(patch.fieldLaw.gravityStrength) * 26) / dist + 7);
@@ -2016,7 +2040,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
 
       // 3. Draw Shockwave Rings
-      (state.shockwaves || []).forEach((sw) => {
+      (frame.shockwaves || []).forEach((sw) => {
         ctx.strokeStyle = 'hsla(' + (sw.hue || primaryHue) + ', 95%, 68%, ' + Math.max(0, sw.alpha) + ')';
         ctx.lineWidth = 2.5;
         ctx.beginPath();
@@ -2025,8 +2049,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
 
       // 4. Draw Elastic Verlet Tether Whip Beams Between Viewer Drones
-      const droneMap = new Map((state.drones || []).map((d) => [d.id, d]));
-      (state.tethers || []).forEach((tether) => {
+      const droneMap = new Map((frame.drones || []).map((d) => [d.id, d]));
+      (frame.tethers || []).forEach((tether) => {
         const a = droneMap.get(tether.aUser);
         const b = droneMap.get(tether.bUser);
         if (!a || !b) return;
@@ -2046,7 +2070,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
 
       // 5. Draw Articulated Anomaly Boss Construct
-      const boss = state.boss;
+      const boss = frame.boss;
       if (boss) {
         ctx.save();
         ctx.translate(boss.x, boss.y);
@@ -2116,7 +2140,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       }
 
       // 6. Draw Boss & Reflected Projectiles
-      (state.projectiles || []).forEach((p) => {
+      (frame.projectiles || []).forEach((p) => {
         ctx.save();
         const pColor = p.fromBoss
           ? 'hsl(' + accentHue + ', 95%, 64%)'
@@ -2131,7 +2155,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
 
       // 7. Draw Viewer Kinetic Vector Drones
-      (state.drones || []).forEach((d) => {
+      (frame.drones || []).forEach((d) => {
         if (d.trail && d.trail.length > 1) {
           ctx.beginPath();
           for (let i = 0; i < d.trail.length; i++) {
@@ -2175,7 +2199,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       });
 
       // 8. Draw Floating 60 FPS Combat & AST Hot-Swap Callouts
-      (state.callouts || []).forEach((c) => {
+      (frame.callouts || []).forEach((c) => {
         ctx.save();
         ctx.font = '800 12px "JetBrains Mono", monospace';
         ctx.fillStyle = c.color || '#00F5D4';
@@ -2201,7 +2225,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       } catch {
         // Ignore transient fetch errors
       }
-      setTimeout(syncLoop, document.visibilityState === 'visible' ? 1000 : 15000);
+      setTimeout(syncLoop, document.visibilityState === 'visible' ? 250 : 15000);
     }
 
     updateDomHud();
