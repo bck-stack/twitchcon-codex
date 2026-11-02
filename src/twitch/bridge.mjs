@@ -376,8 +376,13 @@ export class TwitchIrcLiveConnector {
     this.connectionOptions = null;
   }
 
-  connect(channelName, { oauthToken = process.env.TWITCH_OAUTH_TOKEN, botNick = process.env.TWITCH_BOT_USERNAME } = {}) {
-    this.disconnect();
+  connect(channelName, requestedOptions) {
+    // Keep a user-authorized identity when switching the *target* channel. This
+    // makes it possible to read any public chat and, where Twitch permissions
+    // allow it, reply as the authorized account.
+    const { oauthToken = process.env.TWITCH_OAUTH_TOKEN, botNick = process.env.TWITCH_BOT_USERNAME } =
+      requestedOptions ?? this.connectionOptions ?? {};
+    this.disconnect({ forgetCredentials: false, clearChannel: false });
     const cleanChannel = String(channelName || '')
       .trim()
       .toLowerCase()
@@ -497,7 +502,7 @@ export class TwitchIrcLiveConnector {
     return false;
   }
 
-  disconnect() {
+  disconnect({ forgetCredentials = true, clearChannel = true } = {}) {
     this.autoReconnect = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -512,7 +517,16 @@ export class TwitchIrcLiveConnector {
       this.ws = null;
     }
     this.status = 'disconnected';
+    if (clearChannel) this.channel = null;
+    if (forgetCredentials) {
+      this.connectionOptions = null;
+      this.authenticated = false;
+    }
     this.onStatusChange(this.getStatus());
+  }
+
+  getAccessToken() {
+    return this.connectionOptions?.oauthToken || null;
   }
 
   getStatus() {

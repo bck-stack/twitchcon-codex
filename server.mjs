@@ -144,6 +144,36 @@ export const server = http.createServer(async (req, res) => {
       const directive = room.eventSub.triggerEvent(eventBody?.subscription?.type || 'channel.follow', eventBody.event || {}, 'eventsub_webhook'); sendJson(res, 200, { ...payload(room), directive }); return;
     }
     const body = req.method === 'POST' ? await readJsonBody(req) : null; const room = roomFrom(url, body);
+    if (req.method === 'POST' && url.pathname === '/api/twitch/leave') {
+      if (room.state.channel) channelRooms.delete(room.state.channel);
+      room.twitch.disconnect({ forgetCredentials: false });
+      room.state.channel = null;
+      pushChat(room, { username: 'system', message: 'Left the live Twitch chat. Your authorized account remains available for another channel.', source: 'twitch-irc', badge: 'DISCONNECTED' });
+      sendJson(res, 200, payload(room)); return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/twitch/disconnect-account') {
+      const accessToken = room.twitch.getAccessToken();
+      if (room.state.channel) channelRooms.delete(room.state.channel);
+      room.twitch.disconnect();
+      room.state.channel = null;
+      room.state.twitchIdentity = null;
+      let revoked = false;
+      if (accessToken && process.env.TWITCH_CLIENT_ID) {
+        try {
+          const revokeResponse = await fetch('https://id.twitch.tv/oauth2/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ client_id: process.env.TWITCH_CLIENT_ID, token: accessToken }),
+            signal: AbortSignal.timeout(8_000)
+          });
+          revoked = revokeResponse.ok;
+        } catch {
+          revoked = false;
+        }
+      }
+      pushChat(room, { username: 'system', message: revoked ? 'Twitch account disconnected and OAuth access revoked.' : 'Twitch account disconnected locally. Revoke access in Twitch Connections if needed.', source: 'twitch-oauth', badge: revoked ? 'REVOKED' : 'DISCONNECTED' });
+      sendJson(res, 200, { ...payload(room), revoked }); return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/chat/send') { const processed = await processIncoming(room, { username: body.username || 'viewer', color: body.color || '#00F5D4', message: body.message, source: body.source || 'studio-live-chat', badge: body.badge || 'CHAT' }); sendJson(res, 200, { ...payload(room), processed }); return; }
     if (req.method === 'POST' && url.pathname === '/api/patch/compile') { const processed = await processIncoming(room, { username: body.author || 'viewer', message: `!patch ${String(body.prompt || '')}`, source: 'codex-mutator', badge: 'CODEX' }); const data = payload(room); sendJson(res, processed?.codexEntry ? 200 : 429, { ...data, ...(processed?.codexEntry ? { compilerMode: processed.codexEntry.compilerMode, compileLatencyMs: processed.codexEntry.compileLatencyMs, patch: room.engine.activePatch, diffs: processed.codexEntry.diffs } : { ok: false, error: processed?.chatEntry?.reply || 'Patch rejected' }) }); return; }
     if (req.method === 'POST' && url.pathname === '/api/patch/rollback') { const previous = structuredClone(room.engine.activePatch); const rolled = room.engine.rollbackToPatch(body.patchId); if (!rolled) { sendJson(res, 404, { ok: false, error: 'Patch ID not found in this room history' }); return; } const diffs = computePatchDiff(previous, rolled); pushCodexLog(room, { author: 'room_rollback', prompt: `Rollback to ${rolled.title}`, compilerMode: 'ast-snapshot-rollback', compileLatencyMs: 0.1, patch: rolled, diffs }); sendJson(res, 200, { ...payload(room), patch: rolled, diffs }); return; }

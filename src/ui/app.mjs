@@ -996,10 +996,12 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             <div class="input-row">
               <input type="text" class="text-input" id="inputTwitchChannel" placeholder="Your Twitch channel name (e.g. your_channel)" />
               <button class="btn btn-primary" id="btnConnectTwitch" style="white-space:nowrap;">Connect Live IRC</button>
+              <button class="btn" id="btnLeaveTwitch" style="white-space:nowrap;" disabled>Leave Live IRC</button>
             </div>
             <div class="input-row" style="margin-top:8px;">
               <button class="btn" id="btnAuthorizeTwitch" style="white-space:nowrap;">Connect My Twitch Account</button>
-              <span style="font-size:11px; color:var(--text-dim);">Authorize your own channel to enable chat replies.</span>
+              <button class="btn btn-danger" id="btnDisconnectTwitchAccount" style="white-space:nowrap;" disabled>Disconnect Twitch Account</button>
+              <span style="font-size:11px; color:var(--text-dim);">Any public channel can be read; authorization enables replies where Twitch permits them.</span>
             </div>
           </div>
 
@@ -1385,6 +1387,16 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       window.location.assign('/auth/twitch/connect?room=' + encodeURIComponent(ROOM_ID));
     });
 
+    document.getElementById('btnLeaveTwitch').addEventListener('click', async () => {
+      const res = await postApi('/api/twitch/leave', {});
+      applyServerPayload(res);
+    });
+
+    document.getElementById('btnDisconnectTwitchAccount').addEventListener('click', async () => {
+      const res = await postApi('/api/twitch/disconnect-account', {});
+      applyServerPayload(res);
+    });
+
     // =========================================================================
     // PANE 2 ACTIONS: CODEX LIVE RULE MUTATOR (!PATCH)
     // =========================================================================
@@ -1503,20 +1515,33 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
         .join('');
 
       // Twitch Status Bar
+      const leaveButton = document.getElementById('btnLeaveTwitch');
       if (fullData.twitch && fullData.twitch.channel) {
         const ch = fullData.twitch.channel;
         const st = (fullData.twitch.status || 'connected').toUpperCase();
         document.getElementById('twitchStatusText').textContent = 'IRC: #' + ch + ' (' + st + ')';
         document.getElementById('ircConnectionDetail').textContent =
           '#' + ch + ' (' + st + ' // ' + (fullData.twitch.messagesReceived || 0) + ' msgs)';
+        leaveButton.disabled = false;
+      } else {
+        document.getElementById('twitchStatusText').textContent = 'IRC: choose a channel';
+        document.getElementById('ircConnectionDetail').textContent = 'Not connected — choose any public channel';
+        leaveButton.disabled = true;
       }
       const oauthButton = document.getElementById('btnAuthorizeTwitch');
-      if (fullData.twitch?.authenticated && fullData.twitch?.identity?.login) {
+      const disconnectAccountButton = document.getElementById('btnDisconnectTwitchAccount');
+      if (fullData.twitch?.identity?.login) {
         oauthButton.textContent = 'Twitch Authorized: @' + fullData.twitch.identity.login;
         oauthButton.disabled = true;
+        disconnectAccountButton.disabled = false;
       } else if (!fullData.twitch?.oauthConfigured) {
         oauthButton.textContent = 'Twitch OAuth setup required';
         oauthButton.disabled = true;
+        disconnectAccountButton.disabled = true;
+      } else {
+        oauthButton.textContent = 'Connect My Twitch Account';
+        oauthButton.disabled = false;
+        disconnectAccountButton.disabled = true;
       }
 
       // PANE 1: Render Live Chat Messages Window
