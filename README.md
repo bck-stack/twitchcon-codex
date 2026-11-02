@@ -89,6 +89,24 @@ Use `GET /healthz` as the deployment health check. Keep `OPENAI_API_KEY`,
 `TWITCH_CLIENT_SECRET`, and `TWITCH_EVENTSUB_SECRET` in host-managed secret
 variables; never enter them in the web UI or commit them to the repository.
 
+### Twitch channel authorization
+
+Anonymous IRC mode lets a visitor observe any public channel they enter. To
+connect their own Twitch account and enable chat replies, configure these Render
+environment variables after registering the Twitch application:
+
+```text
+TWITCH_CLIENT_ID=<Twitch application Client ID>
+TWITCH_CLIENT_SECRET=<Twitch application Client Secret>
+TWITCH_REDIRECT_URI=https://chaosforge-t5k0.onrender.com/auth/twitch/callback
+```
+
+The callback URI must exactly match the URI registered in the Twitch Developer
+Console. In the studio, **Connect My Twitch Account** sends the visitor through
+Twitch authorization, returns to their isolated room, and connects IRC as their
+own Twitch account. OAuth tokens stay in server memory and are never returned to
+the browser.
+
 ### Render Free keep-alive
 
 Render Free web services can spin down after 15 minutes without inbound traffic.

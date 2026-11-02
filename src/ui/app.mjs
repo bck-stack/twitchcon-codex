@@ -997,6 +997,10 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
               <input type="text" class="text-input" id="inputTwitchChannel" placeholder="Your Twitch channel name (e.g. your_channel)" />
               <button class="btn btn-primary" id="btnConnectTwitch" style="white-space:nowrap;">Connect Live IRC</button>
             </div>
+            <div class="input-row" style="margin-top:8px;">
+              <button class="btn" id="btnAuthorizeTwitch" style="white-space:nowrap;">Connect My Twitch Account</button>
+              <span style="font-size:11px; color:var(--text-dim);">Authorize your own channel to enable chat replies.</span>
+            </div>
           </div>
 
           <!-- Full-Height Live Twitch Chat Window -->
@@ -1377,6 +1381,10 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       applyServerPayload(res);
     });
 
+    document.getElementById('btnAuthorizeTwitch').addEventListener('click', () => {
+      window.location.assign('/auth/twitch/connect?room=' + encodeURIComponent(ROOM_ID));
+    });
+
     // =========================================================================
     // PANE 2 ACTIONS: CODEX LIVE RULE MUTATOR (!PATCH)
     // =========================================================================
@@ -1501,6 +1509,14 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
         document.getElementById('twitchStatusText').textContent = 'IRC: #' + ch + ' (' + st + ')';
         document.getElementById('ircConnectionDetail').textContent =
           '#' + ch + ' (' + st + ' // ' + (fullData.twitch.messagesReceived || 0) + ' msgs)';
+      }
+      const oauthButton = document.getElementById('btnAuthorizeTwitch');
+      if (fullData.twitch?.authenticated && fullData.twitch?.identity?.login) {
+        oauthButton.textContent = 'Twitch Authorized: @' + fullData.twitch.identity.login;
+        oauthButton.disabled = true;
+      } else if (!fullData.twitch?.oauthConfigured) {
+        oauthButton.textContent = 'Twitch OAuth setup required';
+        oauthButton.disabled = true;
       }
 
       // PANE 1: Render Live Chat Messages Window

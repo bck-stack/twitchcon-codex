@@ -13,11 +13,16 @@ const PATCH_COOLDOWN_MS = 3_000;
 const rooms = new Map();
 const channelRooms = new Map();
 const recentEventSubIds = new Map();
+const oauthStates = new Map();
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const TWITCH_CHAT_SCOPES = ['user:read:chat', 'user:write:chat'];
 
 function nowLabel() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
 function cleanRoomId(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48); }
 function cleanChannel(value) { return String(value || '').trim().toLowerCase().replace(/^#/, '').replace(/[^a-z0-9_]/g, '').slice(0, 25); }
 function makeRoomId() { return `room-${crypto.randomBytes(8).toString('hex')}`; }
+function twitchOAuthConfigured() { return Boolean(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET && process.env.TWITCH_REDIRECT_URI); }
+function roomUrl(origin, roomId, status) { const next = new URL('/', origin); next.searchParams.set('room', roomId); if (status) next.searchParams.set('twitch', status); return `${next.pathname}${next.search}`; }
 
 function pushChat(room, { username, color = '#00F5D4', message, source = 'studio', badge = 'CHAT', reply = null }) {
   const entry = { id: `chat-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, timestamp: nowLabel(), username: String(username || 'viewer').replace(/^@/, '').slice(0, 40), color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#00F5D4', message: String(message || '').slice(0, 600), source: String(source).slice(0, 80), badge: String(badge).slice(0, 40), reply: reply ? String(reply).slice(0, 700) : null };
@@ -36,7 +41,7 @@ function pushCodexLog(room, { author, prompt, compilerMode, compileLatencyMs, pa
 }
 
 function makeRoom(roomId = makeRoomId()) {
-  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), channel: null } };
+  const room = { id: roomId, createdAt: Date.now(), lastAccessAt: Date.now(), engine: new ChaosForgeArenaEngine({ width: 1280, height: 720 }), state: { chatMessages: [], codexLogs: [], lastDiffs: [], lastGuardrailReport: null, lastPatchByAuthor: new Map(), channel: null, twitchIdentity: null } };
   room.eventSub = new TwitchHelixAndEventSubClient({ onEventSubDirective: async (directive) => {
     room.engine.applyEventSubDirective(directive);
     pushChat(room, { username: directive.username || 'twitch_eventsub', color: '#FEE440', message: `[EventSub ${directive.eventType}] ${directive.headline}`, source: 'twitch-eventsub', badge: 'EVENTSUB', reply: `Applied arena kinetic wave (Boss DMG: -${directive.bossDamage || 0})` });
@@ -70,7 +75,7 @@ async function processIncoming(room, { username, color = '#00F5D4', message, sou
   const chatEntry = pushChat(room, { username: author, color, message: text, source, badge, reply }); if (reply && room.twitch.authenticated) room.twitch.say(`[ChaosForge] ${reply}`); return { chatEntry, codexEntry };
 }
 
-function payload(room) { return { ok: true, room: { id: room.id, expiresAt: room.createdAt + ROOM_TTL_MS }, twitch: room.twitch.getStatus(), eventsub: room.eventSub.getStatus(), codex: { connected: true, hasApiKey: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-4o-mini', schemaName: 'ArenaPatchSchema v1 (strict)', logs: room.state.codexLogs }, chatMessages: room.state.chatMessages, lastDiffs: room.state.lastDiffs, lastGuardrailReport: room.state.lastGuardrailReport, snapshot: room.engine.getSnapshot() }; }
+function payload(room) { return { ok: true, room: { id: room.id, expiresAt: room.createdAt + ROOM_TTL_MS }, twitch: { ...room.twitch.getStatus(), oauthConfigured: twitchOAuthConfigured(), identity: room.state.twitchIdentity }, eventsub: room.eventSub.getStatus(), codex: { connected: true, hasApiKey: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-4o-mini', schemaName: 'ArenaPatchSchema v1 (strict)', logs: room.state.codexLogs }, chatMessages: room.state.chatMessages, lastDiffs: room.state.lastDiffs, lastGuardrailReport: room.state.lastGuardrailReport, snapshot: room.engine.getSnapshot() }; }
 const SECURITY_HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://irc-ws.chat.twitch.tv; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'" };
 function sendJson(res, status, body) { res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); }
 function readRawBody(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', (chunk) => { raw += chunk; if (raw.length > 64_000) { reject(new Error('Request body too large')); req.destroy(); } }); req.on('end', () => resolve(raw)); req.on('error', reject); }); }
@@ -82,6 +87,42 @@ export const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/favicon.ico') { res.writeHead(204, SECURITY_HEADERS); res.end(); return; }
     if (req.method === 'GET' && url.pathname === '/healthz') { sendJson(res, 200, { ok: true, rooms: rooms.size, uptimeSec: Math.round(process.uptime()) }); return; }
+    if (req.method === 'GET' && url.pathname === '/auth/twitch/connect') {
+      const room = getRoom(url.searchParams.get('room'), false);
+      if (!room) { sendJson(res, 404, { ok: false, error: 'Studio room is unavailable. Return to the app and try again.' }); return; }
+      if (!twitchOAuthConfigured()) { sendJson(res, 503, { ok: false, error: 'Twitch OAuth is not configured on this deployment yet.' }); return; }
+      const state = crypto.randomBytes(24).toString('base64url');
+      oauthStates.set(state, { roomId: room.id, expiresAt: Date.now() + OAUTH_STATE_TTL_MS });
+      const authorize = new URL('https://id.twitch.tv/oauth2/authorize');
+      authorize.searchParams.set('client_id', process.env.TWITCH_CLIENT_ID);
+      authorize.searchParams.set('redirect_uri', process.env.TWITCH_REDIRECT_URI);
+      authorize.searchParams.set('response_type', 'code');
+      authorize.searchParams.set('scope', TWITCH_CHAT_SCOPES.join(' '));
+      authorize.searchParams.set('state', state);
+      res.writeHead(302, { Location: authorize.toString(), 'Cache-Control': 'no-store' }); res.end(); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/auth/twitch/callback') {
+      const state = String(url.searchParams.get('state') || ''); const pending = oauthStates.get(state);
+      oauthStates.delete(state);
+      if (!pending || pending.expiresAt < Date.now() || !twitchOAuthConfigured()) { sendJson(res, 400, { ok: false, error: 'Twitch authorization expired or is not configured. Start again from the studio.' }); return; }
+      const room = getRoom(pending.roomId, false);
+      const origin = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
+      if (!room || url.searchParams.has('error')) { res.writeHead(302, { Location: roomUrl(origin, pending.roomId, 'cancelled') }); res.end(); return; }
+      const code = url.searchParams.get('code');
+      if (!code) { res.writeHead(302, { Location: roomUrl(origin, pending.roomId, 'failed') }); res.end(); return; }
+      const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.TWITCH_CLIENT_ID, client_secret: process.env.TWITCH_CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: process.env.TWITCH_REDIRECT_URI }) });
+      if (!tokenResponse.ok) { res.writeHead(302, { Location: roomUrl(origin, room.id, 'failed') }); res.end(); return; }
+      const token = await tokenResponse.json();
+      const userResponse = await fetch('https://api.twitch.tv/helix/users', { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token.access_token}` } });
+      const twitchUser = (await userResponse.json()).data?.[0];
+      if (!userResponse.ok || !twitchUser?.login) { res.writeHead(302, { Location: roomUrl(origin, room.id, 'failed') }); res.end(); return; }
+      if (room.state.channel) channelRooms.delete(room.state.channel);
+      room.state.channel = cleanChannel(twitchUser.login); channelRooms.set(room.state.channel, room.id);
+      room.state.twitchIdentity = { login: room.state.channel, displayName: twitchUser.display_name || twitchUser.login, userId: twitchUser.id, tokenExpiresAt: Date.now() + Number(token.expires_in || 0) * 1000 };
+      room.twitch.connect(room.state.channel, { oauthToken: token.access_token, botNick: room.state.channel });
+      pushChat(room, { username: 'system', color: '#86efac', message: `Authorized Twitch connection for #${room.state.channel}. Chat replies are enabled.`, source: 'twitch-oauth', badge: 'CONNECTED' });
+      res.writeHead(302, { Location: roomUrl(origin, room.id, 'connected'), 'Cache-Control': 'no-store' }); res.end(); return;
+    }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/overlay' || url.pathname === '/codex')) {
       let room = getRoom(url.searchParams.get('room'), false);
       if (!room) { room = makeRoom(); const next = new URL(url.pathname, `http://${req.headers.host}`); next.searchParams.set('room', room.id); res.writeHead(302, { Location: `${next.pathname}${next.search}` }); res.end(); return; }
@@ -113,5 +154,5 @@ export const server = http.createServer(async (req, res) => {
   } catch (error) { sendJson(res, 400, { ok: false, error: error.message || 'Bad request' }); }
 });
 
-setInterval(() => { const cutoff = Date.now() - ROOM_TTL_MS; for (const [id, room] of rooms) { room.engine.step(1 / 60); if (room.lastAccessAt < cutoff) { room.twitch.disconnect(); rooms.delete(id); if (room.state.channel) channelRooms.delete(room.state.channel); } } for (const [id, at] of recentEventSubIds) if (at < Date.now() - 10 * 60 * 1000) recentEventSubIds.delete(id); }, 1000 / 60);
+setInterval(() => { const cutoff = Date.now() - ROOM_TTL_MS; for (const [id, room] of rooms) { room.engine.step(1 / 60); if (room.lastAccessAt < cutoff) { room.twitch.disconnect(); rooms.delete(id); if (room.state.channel) channelRooms.delete(room.state.channel); } } for (const [id, at] of recentEventSubIds) if (at < Date.now() - 10 * 60 * 1000) recentEventSubIds.delete(id); for (const [state, pending] of oauthStates) if (pending.expiresAt < Date.now()) oauthStates.delete(state); }, 1000 / 60);
 if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` || process.argv[1]?.endsWith('server.mjs')) server.listen(PORT, () => console.log(`ChaosForge running at http://localhost:${PORT}`));
