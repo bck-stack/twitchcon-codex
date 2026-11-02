@@ -1579,7 +1579,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
         twitchSendNotice = {
           text: fullData.twitch?.identity?.login
             ? 'Twitch session is not connected yet. Press Connect Live IRC and try again.'
-            : 'Writing to Twitch requires Connect My Twitch Account. Reading public chat works without it.',
+            : 'Type commands in Twitch chat, or connect your Twitch account to post from here.',
           until: Date.now() + 7000
         };
         updateDomHud();
@@ -1792,8 +1792,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
         twitchMessageHelp.textContent = canWriteToTwitch
           ? 'Posting as @' + fullData.twitch.identity.login + ' to #' + fullData.twitch.channel + '. Your messages and !commands also drive the arena.'
           : fullData.twitch?.channel
-            ? 'Reading #' + fullData.twitch.channel + ' live. Connect My Twitch Account to post from here.'
-            : 'Connect Live IRC to a channel to read its chat. Connect My Twitch Account to post.';
+            ? 'Type commands in Twitch chat (#' + fullData.twitch.channel + '), or connect your Twitch account to post from here.'
+            : 'Type commands in Twitch chat, or connect your Twitch account to post from here.';
       }
       if (fullData.twitch?.identity?.login && fullData.twitch?.authFailed) {
         oauthButton.textContent = 'Re-authorize Twitch (token rejected)';
@@ -2300,7 +2300,12 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
     // Live State Synchronization Loop. Rendering remains requestAnimationFrame
     // driven; network state only needs a human-visible cadence.
+    let syncTimer = null;
+    let syncInFlight = false;
     async function syncLoop() {
+      clearTimeout(syncTimer);
+      if (syncInFlight) return;
+      syncInFlight = true;
       try {
         const res = await fetch('/api/state?room=' + encodeURIComponent(ROOM_ID));
         if (res.ok) {
@@ -2310,8 +2315,15 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       } catch {
         // Ignore transient fetch errors
       }
-      setTimeout(syncLoop, document.visibilityState === 'visible' ? 250 : 15000);
+      syncInFlight = false;
+      syncTimer = setTimeout(syncLoop, document.visibilityState === 'visible' ? 250 : 1000);
     }
+
+    // Returning to this tab must not wait for the slow background poll.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') syncLoop();
+    });
+    window.addEventListener('focus', () => syncLoop());
 
     updateDomHud();
     requestAnimationFrame(drawArena);

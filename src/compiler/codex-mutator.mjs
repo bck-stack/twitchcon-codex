@@ -211,17 +211,17 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
 
   // 1. Determine Field Law Type
   let fieldType = basePatch.fieldLaw.type;
-  if (/binary|twin|pulsar|two\s+star|double\s+core|iki\s+çekirdek/.test(lower)) {
+  if (/binary|twin|pulsar|two\s+star|double\s+core/.test(lower)) {
     fieldType = 'binary_pulsar';
-  } else if (/magnet|dipole|pole|polar|repel|mıknatıs|kutup/.test(lower)) {
+  } else if (/magnet|dipole|pole|polar|repel/.test(lower)) {
     fieldType = 'magnetic_dipole';
-  } else if (/harmonic|lattice|grid|crystal|standing\s+wave|tesseract|kafes/.test(lower)) {
+  } else if (/harmonic|lattice|grid|crystal|standing\s+wave|tesseract/.test(lower)) {
     fieldType = 'harmonic_lattice';
-  } else if (/zero[\s-]*g|weightless|drift|no\s+gravity|uzay|sıfır\s+yerçekim/.test(lower)) {
+  } else if (/zero[\s-]*g|weightless|drift|no\s+gravity/.test(lower)) {
     fieldType = 'zero_g_drift';
-  } else if (/vortex|cyclone|whirlpool|tornado|swirl|coriolis|girdap|kasırga/.test(lower)) {
+  } else if (/vortex|cyclone|whirlpool|tornado|swirl|coriolis/.test(lower)) {
     fieldType = 'coriolis_vortex';
-  } else if (/black\s*hole|singularity|attractor|karadelik|merkez/.test(lower)) {
+  } else if (/black\s*hole|singularity|attractor/.test(lower)) {
     fieldType = 'central_attractor';
   }
 
@@ -229,19 +229,19 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
   let gravityStrength = basePatch.fieldLaw.gravityStrength;
   if (fieldType === 'zero_g_drift') {
     gravityStrength = 0;
-  } else if (/invert|reverse|repel|anti[\s-]*gravity|push\s+away|ters/.test(lower)) {
+  } else if (/invert|reverse|repel|anti[\s-]*gravity|push\s+away/.test(lower)) {
     gravityStrength = -Math.abs(220 + (seed % 140));
-  } else if (/heavy|crush|singularity|black\s*hole|extreme\s+gravity|3x|karadelik/.test(lower)) {
+  } else if (/heavy|crush|singularity|black\s*hole|extreme\s+gravity|3x/.test(lower)) {
     gravityStrength = 310 + (seed % 95);
-  } else if (/low\s+gravity|moon|float|hafif/.test(lower)) {
+  } else if (/low\s+gravity|moon|float/.test(lower)) {
     gravityStrength = 65;
   } else {
     gravityStrength = 135 + ((seed % 160) - 40);
   }
 
   let vortexTorque = basePatch.fieldLaw.vortexTorque;
-  if (/spin|vortex|cyclone|spiral|orbit|whirl|dön/.test(lower)) {
-    const sign = /counter|reverse|left|ters/.test(lower) ? -1 : 1;
+  if (/spin|vortex|cyclone|spiral|orbit|whirl/.test(lower)) {
+    const sign = /counter|reverse|left/.test(lower) ? -1 : 1;
     vortexTorque = sign * (210 + (seed % 120));
   } else {
     vortexTorque = ((seed % 2 === 0 ? 1 : -1) * (75 + (seed % 110)));
@@ -249,26 +249,26 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
 
   // 3. Restitution & Tether Stiffness
   let restitution = 0.88;
-  if (/bounce|elastic|ricochet|pinball|rubber|mirror|sekme|ayna/.test(lower)) {
+  if (/bounce|elastic|ricochet|pinball|rubber|mirror/.test(lower)) {
     restitution = 1.08;
   } else if (/heavy|absorb|damp|slow/.test(lower)) {
     restitution = 0.58;
   }
 
   let tetherStiffness = 0.18;
-  if (/tether|whip|rope|chain|link|elastic|kement|halat/.test(lower)) {
+  if (/tether|whip|rope|chain|link|elastic/.test(lower)) {
     tetherStiffness = 0.36;
   }
 
   // 4. Boss Chassis & Attacks
   let chassis = basePatch.bossSpec.chassis;
-  if (/leviathan|coil|serpent|whip|bobin/.test(lower)) {
+  if (/leviathan|coil|serpent|whip/.test(lower)) {
     chassis = 'leviathan_coil';
-  } else if (/chronos|tesseract|cube|time|lattice|küp/.test(lower)) {
+  } else if (/chronos|tesseract|cube|time|lattice/.test(lower)) {
     chassis = 'chronos_tesseract';
   } else if (/seraph|gyro|prism|wing|ring/.test(lower)) {
     chassis = 'gyro_seraph';
-  } else if (/citadel|fortress|hex|shield|kale/.test(lower)) {
+  } else if (/citadel|fortress|hex|shield/.test(lower)) {
     chassis = 'hex_citadel';
   } else {
     const chassisList = ['hex_citadel', 'gyro_seraph', 'chronos_tesseract', 'leviathan_coil'];
@@ -276,12 +276,12 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
   }
 
   const attacks = [];
-  if (/ricochet|mirror|prism|laser|beam|lazer|ayna/.test(lower)) attacks.push('ricochet_prism_beam');
-  if (/black\s*hole|singularity|pull|well|karadelik/.test(lower)) attacks.push('gravitational_singularity');
-  if (/whip|tether|sweep|lasso|kement/.test(lower)) attacks.push('tether_whip_sweep');
-  if (/emp|shockwave|pulse|nova|şok/.test(lower)) attacks.push('emp_ring_pulse');
-  if (/mine|trap|orbital|ring|mayın/.test(lower)) attacks.push('orbital_mine_ring');
-  if (/spiral|barrage|lance|bullet|mermi/.test(lower)) attacks.push('spiral_lance_barrage');
+  if (/ricochet|mirror|prism|laser|beam/.test(lower)) attacks.push('ricochet_prism_beam');
+  if (/black\s*hole|singularity|pull|well/.test(lower)) attacks.push('gravitational_singularity');
+  if (/whip|tether|sweep|lasso/.test(lower)) attacks.push('tether_whip_sweep');
+  if (/emp|shockwave|pulse|nova/.test(lower)) attacks.push('emp_ring_pulse');
+  if (/mine|trap|orbital|ring/.test(lower)) attacks.push('orbital_mine_ring');
+  if (/spiral|barrage|lance|bullet/.test(lower)) attacks.push('spiral_lance_barrage');
 
   if (attacks.length < 2) {
     attacks.push('spiral_lance_barrage', 'ricochet_prism_beam', 'emp_ring_pulse');
@@ -289,11 +289,11 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
 
   const shieldArcs = /no\s+shield|glass\s+cannon|unshielded/.test(lower)
     ? 1
-    : /fortress|max\s+shield|5\s+shield|6\s+shield|zırh/.test(lower)
+    : /fortress|max\s+shield|5\s+shield|6\s+shield/.test(lower)
     ? 5
     : 2 + (seed % 4);
 
-  const aggression = /berserk|overdrive|insane|fast|chaos|kaos|hızlı/.test(lower)
+  const aggression = /berserk|overdrive|insane|fast|chaos/.test(lower)
     ? 2.15
     : /calm|slow|training/.test(lower)
     ? 0.75
@@ -306,8 +306,8 @@ export function synthesizeSemanticCandidate(promptText, basePatch = DEFAULT_AREN
     ? 2.25
     : Number((1.25 + ((seed % 70) / 100)).toFixed(2));
 
-  const tetherDamageBonus = /whip|tether|chain|link|halat/.test(lower) ? 3.3 : 2.2;
-  const parryReflectMultiplier = /parry|reflect|mirror|deflect|ayna/.test(lower) ? 2.9 : 1.85;
+  const tetherDamageBonus = /whip|tether|chain|link/.test(lower) ? 3.3 : 2.2;
+  const parryReflectMultiplier = /parry|reflect|mirror|deflect/.test(lower) ? 2.9 : 1.85;
 
   // 6. Title & Aesthetics
   const words = clean
