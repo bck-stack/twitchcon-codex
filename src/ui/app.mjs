@@ -610,7 +610,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     }
 
     .accordion-card {
-      flex: 0 0 auto;
+      flex: 0 0 auto !important;
       min-height: 0;
       overflow: hidden;
       padding: 0;
@@ -618,7 +618,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     }
 
     .accordion-card.accordion-open {
-      flex: 1 1 auto;
+      flex: 1 1 0 !important;
       min-height: 0;
     }
 
@@ -1090,7 +1090,10 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             </div>
             <div id="twitchMessageHelp" style="font-size:11px; color:var(--text-dim); margin:5px 0 8px;">Authorize your account and connect a live channel to write. Incoming messages appear above automatically.</div>
 
-            <!-- Local demo command injector -->
+          </div>
+
+          <!-- Local demo command injector -->
+          <div class="section-box">
             <div class="sub-label" style="margin-top:2px;">
               <span>Studio Demo Command Injector</span>
               <span style="color:var(--accent-amber);">Does not send to Twitch</span>
