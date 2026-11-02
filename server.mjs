@@ -76,8 +76,17 @@ async function processIncoming(room, { username, color = '#00F5D4', message, sou
           apiKey: activeKey,
           model: activeModel
         });
-        if (compiled.ok) { room.engine.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation); codexEntry = pushCodexLog(room, { author, prompt, compilerMode: compiled.compilerMode, compileLatencyMs: compiled.compileLatencyMs, patch: compiled.patch, diffs: compiled.diffs }); reply = `CODEX AST HOT-SWAP -> [${compiled.patch.title}] (${compiled.diffs.length} rules changed)`; }
-        else reply = `GUARDRAIL REJECTED !patch: ${(compiled.validation?.rejectedReasons || ['Unsafe AST']).join(', ')}`;
+        if (compiled.ok) {
+          room.engine.applyValidatedPatch(compiled.patch, compiled.diffs, compiled.validation);
+          codexEntry = pushCodexLog(room, { author, prompt, compilerMode: compiled.compilerMode, compileLatencyMs: compiled.compileLatencyMs, patch: compiled.patch, diffs: compiled.diffs });
+          if (compiled.validation?.warnings?.length) {
+            room.state.lastGuardrailReport = { testedAt: nowLabel(), scenario: `Live !patch (${prompt.slice(0, 60)})`, blocked: false, clampedWarnings: compiled.validation.warnings, inputPayload: { prompt, author }, report: compiled.validation };
+          }
+          reply = `CODEX AST HOT-SWAP -> [${compiled.patch.title}] (${compiled.diffs.length} rules changed)`;
+        } else {
+          room.state.lastGuardrailReport = { testedAt: nowLabel(), scenario: `Live !patch (${prompt.slice(0, 60)})`, blocked: true, clampedWarnings: compiled.validation?.warnings || [], inputPayload: { prompt, author }, report: compiled.validation };
+          reply = `GUARDRAIL REJECTED !patch: ${(compiled.validation?.rejectedReasons || ['Unsafe AST']).join(', ')}`;
+        }
       }
     } else if (command === 'vote') { const voted = room.engine.votePatchProposal({ username: author, indexOrId: argsText }); reply = voted ? `Vote recorded for "${voted.prompt}" (${voted.votes} votes)` : 'No active patch proposal to vote on'; }
     else { const result = room.engine.handleChatCommand({ username: author, color, command, argsText }); reply = result.ok ? `@${author} activated ${result.action}.` : `Unknown command !${command}. Try !join, !slingshot, !tether, !parry, !overclock, !emp, or !patch <rule>.`; }

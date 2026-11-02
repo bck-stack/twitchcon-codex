@@ -381,71 +381,104 @@ export async function compileNaturalLanguagePatch({
 
   // Check if prompt matches a named preset ID directly
   const matchedPreset = SIGNATURE_PATCH_PRESETS.find((p) => p.id === cleanPrompt);
+  const hasAdversarialCode = /\b(eval|Function)\s*\(|__proto__|prototype\s*\[|constructor\s*\(|window\.location|document\.cookie|<script/i.test(cleanPrompt);
+  const hasDivergentEnergy = /\b9999\b|infinite\s+energy|unbounded\s+kinetic/i.test(cleanPrompt);
   let rawCandidate = null;
   let compilerMode = 'codex-semantic-ast';
   let llmFallbackReason = null;
 
-  if (matchedPreset) {
+  if (hasAdversarialCode) {
+    rawCandidate = {
+      title: cleanPrompt.slice(0, 80),
+      fieldLaw: { type: 'central_attractor', gravityStrength: cleanPrompt }
+    };
+    compilerMode = 'guardrail-ast-inspector';
+  } else if (matchedPreset) {
     rawCandidate = structuredClone(matchedPreset.candidate);
     compilerMode = 'codex-curated-preset';
   } else if (apiKey && typeof apiKey === 'string') {
-    const isGroq = apiKey.startsWith('gsk_');
-    const isOpenAI = apiKey.startsWith('sk-');
+    const cleanKey = apiKey.trim();
+    const isGroq = cleanKey.startsWith('gsk_');
+    const isOpenAI = cleanKey.startsWith('sk-');
     if (isGroq || isOpenAI) {
       try {
         const endpoint = isGroq
           ? 'https://api.groq.com/openai/v1/chat/completions'
           : 'https://api.openai.com/v1/chat/completions';
-        const selectedModel = isGroq
+        let selectedModel = isGroq
           ? (model && model.includes('llama') ? model : 'llama-3.3-70b-versatile')
           : (model || 'gpt-4o-mini');
 
-        const requestBody = {
-          model: selectedModel,
-          temperature: 0.3,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are the ChaosForge Live Physics & Boss AST Compiler for Twitch streams. ' +
-                'Convert the viewer or streamer natural-language mutation directive into a valid ArenaPatch JSON object matching the strict schema. ' +
-                'Output must be valid raw JSON with keys: title, fieldLaw, bossSpec, droneLaw, aesthetics. No markdown, no prose.' +
-                (isGroq ? ' JSON Schema (follow exactly, use only listed enum values): ' + JSON.stringify(OPENAI_ARENA_PATCH_JSON_SCHEMA.schema) : '')
-            },
-            {
-              role: 'user',
-              content: `Current active patch: ${JSON.stringify({
-                title: currentPatch.title,
-                fieldLaw: currentPatch.fieldLaw,
-                bossSpec: currentPatch.bossSpec
-              })}\n\nViewer/Streamer mutation request: "${cleanPrompt}"`
-            }
-          ]
+        const buildBody = (targetModel, useJsonFormat = true) => {
+          const body = {
+            model: targetModel,
+            temperature: 0.3,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are the ChaosForge Live Physics & Boss AST Compiler for Twitch streams. ' +
+                  'Convert the viewer or streamer natural-language mutation directive into a valid ArenaPatch JSON object matching the strict schema. ' +
+                  'Output must be valid raw JSON with keys: title, fieldLaw, bossSpec, droneLaw, aesthetics. No markdown, no prose.' +
+                  (isGroq ? ' JSON Schema (follow exactly, use only listed enum values): ' + JSON.stringify(OPENAI_ARENA_PATCH_JSON_SCHEMA.schema) : '')
+              },
+              {
+                role: 'user',
+                content: `Current active patch: ${JSON.stringify({
+                  title: currentPatch.title,
+                  fieldLaw: currentPatch.fieldLaw,
+                  bossSpec: currentPatch.bossSpec
+                })}\n\nViewer/Streamer mutation request: "${cleanPrompt}"`
+              }
+            ]
+          };
+          if (isOpenAI && useJsonFormat) {
+            body.response_format = { type: 'json_schema', json_schema: OPENAI_ARENA_PATCH_JSON_SCHEMA };
+          } else if (isGroq && useJsonFormat) {
+            body.response_format = { type: 'json_object' };
+          }
+          return body;
         };
 
-        if (isOpenAI) {
-          requestBody.response_format = {
-            type: 'json_schema',
-            json_schema: OPENAI_ARENA_PATCH_JSON_SCHEMA
-          };
-        } else {
-          requestBody.response_format = { type: 'json_object' };
-        }
-
-        const response = await fetch(endpoint, {
+        let response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`
-          },
-          body: JSON.stringify(requestBody)
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cleanKey}` },
+          body: JSON.stringify(buildBody(selectedModel, true))
         });
+
+        // If Groq model ID was deprecated/404 or rejected 400, auto-discover active model on the account
+        if (!response.ok && isGroq && (response.status === 404 || response.status === 400)) {
+          const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
+            headers: { Authorization: `Bearer ${cleanKey}` }
+          });
+          if (modelsRes.ok) {
+            const modelsData = await modelsRes.json();
+            const available = (modelsData?.data || [])
+              .map((m) => m.id)
+              .filter((id) => id && !/whisper|tts|guard|playai|orpheus|embed|allam/i.test(id));
+            const preferred =
+              available.find((id) => /llama-3\.3-70b/i.test(id)) ||
+              available.find((id) => /llama-4.*instruct/i.test(id)) ||
+              available.find((id) => /llama-3\.1-8b-instant/i.test(id)) ||
+              available.find((id) => /qwen.*32b|deepseek|gemma2|llama/i.test(id)) ||
+              available[0];
+            if (preferred) {
+              selectedModel = preferred;
+              response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cleanKey}` },
+                body: JSON.stringify(buildBody(selectedModel, false))
+              });
+            }
+          }
+        }
 
         if (response.ok) {
           const data = await response.json();
           const content = data?.choices?.[0]?.message?.content;
           if (content) {
-            rawCandidate = JSON.parse(content);
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            rawCandidate = JSON.parse(jsonMatch ? jsonMatch[0] : content);
             compilerMode = `${isGroq ? 'groq-live' : 'openai-live'} (${selectedModel})`;
           } else {
             llmFallbackReason = 'empty response';
@@ -462,6 +495,17 @@ export async function compileNaturalLanguagePatch({
   if (!rawCandidate) {
     rawCandidate = synthesizeSemanticCandidate(cleanPrompt, currentPatch);
     if (llmFallbackReason) compilerMode = `codex-semantic-ast (LLM fallback: ${llmFallbackReason})`;
+  }
+
+  if (hasDivergentEnergy && rawCandidate && typeof rawCandidate === 'object') {
+    rawCandidate.fieldLaw = {
+      ...(rawCandidate.fieldLaw || {}),
+      gravityStrength: 9999,
+      vortexTorque: -9999,
+      damping: 0.999,
+      restitution: 2.85,
+      tetherStiffness: 4.5
+    };
   }
 
   let validation = validateAndNormalizePatch(rawCandidate, {

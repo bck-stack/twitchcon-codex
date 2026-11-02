@@ -1109,7 +1109,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             </div>
             <div class="verb-bar">
               <button class="btn" data-cmd="!slingshot">!slingshot</button>
-              <button class="btn" data-cmd="!tether @talhacomak">!tether</button>
+              <button class="btn" data-cmd="!tether @bck-stack">!tether</button>
               <button class="btn" data-cmd="!parry">!parry</button>
               <button class="btn" data-cmd="!overclock">!overclock</button>
               <button class="btn" data-cmd="!emp">!emp</button>
@@ -1542,7 +1542,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     document.querySelectorAll('[data-eventsub]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const subType = btn.dataset.eventsub;
-        const sender = document.getElementById('inputChatSender').value.trim() || 'talhacomak';
+        const sender = document.getElementById('inputChatSender').value.trim() || 'bck-stack';
         const res = await postApi('/api/twitch/eventsub/simulate', {
           type: subType,
           username: sender,
@@ -1658,9 +1658,16 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       applyServerPayload(res);
 
       if (res.ok) {
-        document.getElementById('compileLatencyLabel').textContent =
+        const lbl = document.getElementById('compileLatencyLabel');
+        lbl.style.color = 'var(--accent-cyan)';
+        lbl.textContent =
           'Compiled & Verified 18/18 Invariants in ' + res.compileLatencyMs + 'ms (' + res.compilerMode + ')';
         playSynthPulse(state.activePatch.aesthetics.harmonicFrequencyHz || 260, 'sawtooth', 0.35);
+      } else {
+        const lbl = document.getElementById('compileLatencyLabel');
+        lbl.style.color = '#f87171';
+        lbl.textContent = res.error || 'Guardrail Blocked Unsafe AST (See Tab 4)';
+        playSynthPulse(115, 'sawtooth', 0.3);
       }
     }
 
@@ -1671,7 +1678,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
 
     const SAMPLE_VIEWER_PATCHES = [
-      { user: 'talhacomak', prompt: 'Invert magnetic dipole poles and supercharge elastic viewer tether whips to 3.4x cleave damage' },
+      { user: 'bck-stack', prompt: 'Invert magnetic dipole poles and supercharge elastic viewer tether whips to 3.4x cleave damage' },
       { user: 'shader_witch', prompt: 'Create a 4-pole harmonic standing-wave lattice with Chronos Tesseract and high-speed parry reflections' },
       { user: 'kinetic_nova', prompt: 'Kill central gravity into zero-g hyper-elastic ricochet chamber with prism lasers' },
       { user: 'arena_visitor', prompt: 'Twin binary pulsar singularity wells with 5 shield arcs and spiral lance barrage' }
