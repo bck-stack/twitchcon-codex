@@ -603,6 +603,75 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
       overflow: hidden;
     }
 
+    /* Right-dock focus accordion: one card can use the full pane at a time. */
+    .dock-pane.accordion-enabled {
+      overflow: hidden;
+      gap: 8px;
+    }
+
+    .accordion-card {
+      flex: 0 0 auto;
+      min-height: 0;
+      overflow: hidden;
+      padding: 0;
+      gap: 0;
+    }
+
+    .accordion-card.accordion-open {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .accordion-card.accordion-open.section-box.grow {
+      min-height: 0;
+    }
+
+    .accordion-toggle {
+      width: 100%;
+      min-height: 46px;
+      padding: 12px 14px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      flex-shrink: 0;
+    }
+
+    .accordion-toggle:hover,
+    .accordion-card.accordion-open > .accordion-toggle {
+      background: rgba(0, 245, 212, 0.065);
+    }
+
+    .accordion-toggle:focus-visible {
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: -2px;
+    }
+
+    .accordion-card > .accordion-toggle .accordion-chevron {
+      color: var(--accent-cyan);
+      margin-left: 10px;
+      transition: transform 150ms ease;
+    }
+
+    .accordion-card.accordion-open > .accordion-toggle .accordion-chevron {
+      transform: rotate(90deg);
+    }
+
+    .accordion-card:not(.accordion-open) > :not(.accordion-toggle) {
+      display: none !important;
+    }
+
+    .accordion-card.accordion-open > :not(.accordion-toggle) {
+      margin-left: 14px;
+      margin-right: 14px;
+    }
+
+    .accordion-card.accordion-open > :last-child {
+      margin-bottom: 12px;
+    }
+
     .sub-label {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1173,7 +1242,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           </div>
 
           <!-- Live Guardrail Execution Diagnostic Box -->
-          <div class="guardrail-report-card" id="guardrailReportBox">
+          <div class="guardrail-report-card" id="guardrailReportBox" data-accordion-title="Latest Guardrail Report">
             <div style="font-weight:800; color:#86efac; margin-bottom:4px;" id="guardrailHeadline">
               ✓ GUARDRAIL STATUS: ALL 18 SAFETY &amp; PHYSICS INVARIANTS PASSING
             </div>
@@ -1258,6 +1327,55 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
         switchRightPane(btn.dataset.pane);
       });
     });
+
+    // Each right-dock pane is a focus accordion. A single opened card owns the
+    // available vertical space; clicking it again returns to compact headings.
+    function setupDockAccordions() {
+      const defaultOpenIndexes = { dockPane1: 1, dockPane2: 1, dockPane3: 0, dockPane4: 0 };
+      document.querySelectorAll('.dock-pane').forEach((pane) => {
+        pane.classList.add('accordion-enabled');
+        const cards = Array.from(pane.children).filter((child) =>
+          child.classList.contains('section-box') || child.classList.contains('guardrail-report-card')
+        );
+        const setOpenCard = (nextCard) => {
+          cards.forEach((card) => {
+            const isOpen = card === nextCard;
+            card.classList.toggle('accordion-open', isOpen);
+            card.querySelector(':scope > .accordion-toggle')?.setAttribute('aria-expanded', String(isOpen));
+          });
+        };
+        cards.forEach((card) => {
+          card.classList.add('accordion-card');
+          let toggle = card.querySelector(':scope > .sub-label');
+          if (toggle) {
+            toggle.classList.add('accordion-toggle');
+            toggle.setAttribute('role', 'button');
+            toggle.tabIndex = 0;
+          } else {
+            toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'accordion-toggle sub-label';
+            toggle.innerHTML = '<span>' + escapeHtml(card.dataset.accordionTitle || 'Details') + '</span>';
+            card.prepend(toggle);
+          }
+          const chevron = document.createElement('span');
+          chevron.className = 'accordion-chevron';
+          chevron.setAttribute('aria-hidden', 'true');
+          chevron.textContent = '▸';
+          toggle.append(chevron);
+          const toggleCard = () => setOpenCard(card.classList.contains('accordion-open') ? null : card);
+          toggle.addEventListener('click', toggleCard);
+          toggle.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleCard();
+            }
+          });
+        });
+        setOpenCard(cards[defaultOpenIndexes[pane.id]] || null);
+      });
+    }
+    setupDockAccordions();
 
     // Procedural Web Audio Synthesizer
     function playSynthPulse(freqHz = 220, type = 'sine', durationSec = 0.22) {
