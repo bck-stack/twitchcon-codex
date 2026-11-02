@@ -1642,7 +1642,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
     // =========================================================================
     // DOM HUD & 4-PANE RENDERER
     // =========================================================================
-    let lastRenderedChatKey = '';
+    let lastRenderedChatKey = null;
     let lastRenderedCodexId = null;
 
     function updateDomHud() {
