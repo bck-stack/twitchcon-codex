@@ -1763,7 +1763,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
               '</div>'
           )
           .join('')
-          : '<div style="color:var(--text-dim); padding:12px 4px; line-height:1.5;">No viewer messages yet. Open the connected channel’s Twitch chat in another tab and send a message; it will appear here. For a video without viewers, use the clearly labeled Demo Audience Sequence below.</div>';
+          : '<div style="color:var(--text-dim); padding:12px 4px; line-height:1.5;">Waiting for live chat. Send a message in the connected Twitch chat, or open the separate Demo card for a labeled local sequence.</div>';
       }
 
       // PANE 2: Render Codex Prompt & Response Log
