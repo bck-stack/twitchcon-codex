@@ -1851,7 +1851,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
 
       if (gr) {
         if (gr.blocked) {
-          grBox.className = 'guardrail-report-card blocked';
+          grBox.classList.remove('clamped');
+          grBox.classList.add('blocked');
           grHead.style.color = '#fca5a5';
           grHead.textContent =
             '🛑 GUARDRAIL INTERCEPTED & BLOCKED UNSAFE PAYLOAD [' + gr.testedAt + ']';
@@ -1862,7 +1863,8 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
             '</div>' +
             '<div style="color:#86efac; margin-top:4px;">✓ Result: Malicious payload was dropped before execution. 60 FPS Arena remained 100% unaffected.</div>';
         } else {
-          grBox.className = 'guardrail-report-card clamped';
+          grBox.classList.remove('blocked');
+          grBox.classList.add('clamped');
           grHead.style.color = '#fef08a';
           grHead.textContent =
             '⚡ GUARDRAIL CLAMPED DIVERGENT PHYSICS PAYLOAD [' + gr.testedAt + ']';
@@ -1897,7 +1899,7 @@ export function renderChaosForgeHtml({ initialPayload, presets = SIGNATURE_PATCH
           2
         );
       } else {
-        grBox.className = 'guardrail-report-card';
+        grBox.classList.remove('blocked', 'clamped');
         const checks = state.lastValidation?.checks || [];
         checkEl.innerHTML = checks
           .map(
